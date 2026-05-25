@@ -52,6 +52,13 @@ class MocFile(
 
     companion object {
         const val DEFAULT_DIFF_ALG = "default/diff"
+
+        fun isBinary(path: Path): Boolean {
+            val buffer = ByteArray(8000)
+            val read = Files.newInputStream(path).use { it.read(buffer) }
+            if (read <= 0) return false
+            return buffer.take(read).any { it == 0.toByte() }
+        }
     }
 
     fun getAbsolutePath(): Path = fileSystem.getRootPath().resolve(relativePath)
@@ -112,12 +119,6 @@ class MocFile(
         } catch (_: Exception) {}
 
         return Charset.defaultCharset().name()
-    }
-
-    private fun isBinary(path: Path): Boolean {
-        val buffer = ByteArray(8000)
-        val read = Files.newInputStream(path).use { it.read(buffer) }
-        return buffer.take(read).any { it == 0.toByte() }
     }
 
     private fun detectBOM(path: Path): String? {

@@ -14,6 +14,7 @@ open class MocFileSystem(
             file.isRegularFile()
                 && !file.startsWith(metadataPath)
                 && ignoredPaths.none { file.startsWith(rootPath.resolve(it)) }
+                && !MocFile.isBinary(file)
         }
         .map { MocFile(this, rootPath.relativize(it)) }
         .toList()

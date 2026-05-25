@@ -12,7 +12,7 @@ import kotlin.io.path.writeText
 object MocSettings {
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
-    private val defaultIgnoredPaths = listOf("mods", "resourcepacks", "config/moc.json", "config/moc")
+    private val defaultIgnoredPaths = listOf("mods", "resourcepacks", "logs", "config/moc.json", "config/moc")
 
     private fun settingsPath(): Path =
         PlatformService.INSTANCE.getConfigDir().resolve("moc.json")

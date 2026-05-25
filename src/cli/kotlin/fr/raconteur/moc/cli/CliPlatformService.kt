@@ -7,7 +7,7 @@ import kotlin.io.path.isDirectory
 
 object CliPlatformService : PlatformService {
 
-    private val gameDir: Path by lazy {
+    private val detectedGameDir: Path by lazy {
         val candidates = listOf(
             Path.of("run"),
             Path.of(".")
@@ -18,9 +18,9 @@ object CliPlatformService : PlatformService {
 
     override fun getPlatformName(): String = "Cli"
 
-    override fun getGameDir(): Path = gameDir
+    override fun getGameDir(): Path = detectedGameDir
 
-    override fun getConfigDir(): Path = gameDir.resolve("config")
+    override fun getConfigDir(): Path = detectedGameDir.resolve("config")
 
     private fun isValidGameDir(path: Path): Boolean =
         path.isDirectory()
