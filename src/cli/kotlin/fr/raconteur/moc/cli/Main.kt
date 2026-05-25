@@ -6,7 +6,7 @@ import fr.raconteur.moc.platform.PlatformService
 
 class MocCli : CliktCommand(name = "moc") {
     override fun run() {
-        runFileBrowser()
+        runDiffBrowser()
     }
 }
 

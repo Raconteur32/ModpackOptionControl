@@ -5,6 +5,7 @@ import fr.raconteur.moc.platform.PlatformService
 import org.luaj.vm2.Globals
 import org.luaj.vm2.LuaError
 import org.luaj.vm2.LuaValue
+import org.luaj.vm2.LoadState
 import org.luaj.vm2.compiler.LuaC
 import org.luaj.vm2.lib.PackageLib
 import org.luaj.vm2.lib.ResourceFinder
@@ -31,6 +32,7 @@ open class MocLuaContext(moduleName: String) {
         globals.load(StringLib())
         globals.load(TableLib())
         globals.load(JseMathLib())
+        LoadState.install(globals)
         LuaC.install(globals)
 
         globals.set("api", MocLuaAPI.buildTable())

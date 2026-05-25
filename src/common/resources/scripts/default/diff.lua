@@ -1,3 +1,5 @@
+local M = {}
+
 local function sorted_keys(t)
     local keys = {}
     for k in pairs(t) do keys[#keys + 1] = k end
@@ -10,7 +12,7 @@ local function is_array(val)
 end
 
 -- Fills flat_diff (FlatDiffAPIWrapper) with the difference between from and to (MocFileAPIWrapper)
-function diff(from, to, flat_diff)
+function M.diff(from, to, flat_diff)
     local from_flat = from:get_flat_content()
     local to_flat   = to:get_flat_content()
 
@@ -52,3 +54,5 @@ function diff(from, to, flat_diff)
 
     flat_diff:rationalize()
 end
+
+return M

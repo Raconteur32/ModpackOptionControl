@@ -2,6 +2,7 @@ package fr.raconteur.moc.filesystem
 
 import java.nio.file.Files
 import java.nio.file.Path
+import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
 
 open class MocFileSystem(
@@ -9,15 +10,16 @@ open class MocFileSystem(
     private val metadataPath: Path,
     private val ignoredPaths: List<Path> = emptyList()
 ) {
-    val files: List<MocFile> = Files.walk(rootPath)
-        .filter { file ->
-            file.isRegularFile()
-                && !file.startsWith(metadataPath)
-                && ignoredPaths.none { file.startsWith(rootPath.resolve(it)) }
-                && !MocFile.isBinary(file)
-        }
-        .map { MocFile(this, rootPath.relativize(it)) }
-        .toList()
+    val files: List<MocFile> = if (!rootPath.isDirectory()) emptyList() else
+        Files.walk(rootPath)
+            .filter { file ->
+                file.isRegularFile()
+                    && !file.startsWith(metadataPath)
+                    && ignoredPaths.none { file.startsWith(rootPath.resolve(it)) }
+                    && !MocFile.isBinary(file)
+            }
+            .map { MocFile(this, rootPath.relativize(it)) }
+            .toList()
 
     fun getRootPath(): Path = rootPath
     fun getMetadataPath(): Path = metadataPath
