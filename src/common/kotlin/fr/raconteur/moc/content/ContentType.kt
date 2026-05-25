@@ -11,8 +11,6 @@ import fr.raconteur.moc.filesystem.MocFile
 abstract class ContentType {
     abstract val id: String
 
-    fun getId(): String = id
-
     abstract fun hasPreferredExtension(filename: String): Boolean
 
     abstract fun hasValidContent(file: MocFile): Boolean

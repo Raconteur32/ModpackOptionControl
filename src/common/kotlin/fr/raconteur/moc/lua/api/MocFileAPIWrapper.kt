@@ -17,7 +17,7 @@ class MocFileAPIWrapper(private val file: MocFile) {
 
     fun get_relative_path(): String = file.relativePath.toString()
     fun get_encoding(): String = file.encoding
-    fun get_content_type(): String = file.contentType.getId()
+    fun get_content_type(): String = file.contentType.id
     fun get_raw_content(): String = file.getStringContent()
     fun get_content(): LuaValue = jsonToLua(file.getContent())
 

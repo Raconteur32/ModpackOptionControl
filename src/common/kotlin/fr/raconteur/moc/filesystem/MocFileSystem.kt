@@ -20,7 +20,6 @@ open class MocFileSystem(
 
     fun getRootPath(): Path = rootPath
     fun getMetadataPath(): Path = metadataPath
-    fun getFiles(): List<MocFile> = files
     fun hasFile(relativePath: Path): Boolean = files.any { it.relativePath == relativePath }
 
     fun diffFrom(other: MocFileSystem): FileSystemDiff {

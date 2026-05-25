@@ -11,26 +11,61 @@ group = providers.gradleProperty("maven_group").get()
 
 repositories {
 	mavenCentral()
+	maven("https://us-central1-maven.pkg.dev/varabyte-repos/public")
+}
+
+sourceSets {
+	val common by creating
+	val cli by creating {
+		compileClasspath += common.output
+		runtimeClasspath += common.output
+	}
+	main {
+		compileClasspath += common.output
+		runtimeClasspath += common.output
+	}
+}
+
+configurations {
+	named("implementation") {
+		extendsFrom(configurations["commonImplementation"])
+	}
+	named("cliImplementation") {
+		extendsFrom(configurations["commonImplementation"])
+	}
 }
 
 dependencies {
 	// To change the versions see the gradle.properties file
 	minecraft("com.mojang:minecraft:${providers.gradleProperty("minecraft_version").get()}")
-	
+
 	implementation("net.fabricmc:fabric-loader:${providers.gradleProperty("loader_version").get()}")
 
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	implementation("net.fabricmc.fabric-api:fabric-api:${providers.gradleProperty("fabric_api_version").get()}")
 	implementation("net.fabricmc:fabric-language-kotlin:${providers.gradleProperty("fabric_kotlin_version").get()}")
 
-	implementation("com.ibm.icu:icu4j:76.1")
+	// Common deps — available to both common and main (via configuration extension)
+	"commonImplementation"("com.ibm.icu:icu4j:76.1")
+	"commonImplementation"("org.luaj:luaj-jse:3.0.1")
+	"commonImplementation"("com.jayway.jsonpath:json-path:2.9.0")
+	"commonImplementation"("com.google.code.gson:gson:2.11.0")
+
+	// Embedded in the mod JAR via Jar-in-Jar
 	include("com.ibm.icu:icu4j:76.1")
-
-	implementation("org.luaj:luaj-jse:3.0.1")
 	include("org.luaj:luaj-jse:3.0.1")
-
-	implementation("com.jayway.jsonpath:json-path:2.9.0")
 	include("com.jayway.jsonpath:json-path:2.9.0")
+
+	// CLI deps
+	"cliImplementation"("com.github.ajalt.clikt:clikt:5.0.3")
+	"cliImplementation"("com.varabyte.kotter:kotter-jvm:1.1.2")
+}
+
+tasks.register<JavaExec>("runCli") {
+	group = "application"
+	classpath = sourceSets["cli"].runtimeClasspath
+	mainClass.set("fr.raconteur.moc.cli.MainKt")
+	jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
 tasks.processResources {

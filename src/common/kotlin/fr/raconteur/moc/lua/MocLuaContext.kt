@@ -1,7 +1,7 @@
 package fr.raconteur.moc.lua
 
-import fr.raconteur.moc.ModpackOptionControl
 import fr.raconteur.moc.lua.api.MocLuaAPI
+import fr.raconteur.moc.platform.PlatformService
 import org.luaj.vm2.Globals
 import org.luaj.vm2.LuaError
 import org.luaj.vm2.LuaValue
@@ -18,8 +18,8 @@ import kotlin.io.path.inputStream
 
 open class MocLuaContext(moduleName: String) {
 
-    private val scriptsDir: Path = ModpackOptionControl.getInstanceDir().resolve("config/moc/scripts")
-    private val modpackScriptsDir: Path = ModpackOptionControl.getInstanceDir().resolve("config/moc/modpack_scripts")
+    private val scriptsDir: Path = PlatformService.INSTANCE.getConfigDir().resolve("moc/scripts")
+    private val modpackScriptsDir: Path = PlatformService.INSTANCE.getConfigDir().resolve("moc/modpack_scripts")
 
     private val globals: Globals = createSandboxedGlobals()
     private val module: LuaValue = globals["require"].call(moduleName)

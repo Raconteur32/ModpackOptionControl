@@ -43,7 +43,7 @@ class MocFile(
             contentType = inferContentType()
             diffAlg = DEFAULT_DIFF_ALG
             metadataValues["encoding"] = encoding
-            metadataValues["content"] = contentType.getId()
+            metadataValues["content"] = contentType.id
             metadataValues["diffalg"] = diffAlg
             metaFile.createParentDirectories()
             writeMetadata(metaFile, metadataValues)

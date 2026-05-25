@@ -2,6 +2,7 @@ package fr.raconteur.moc
 
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
+import fr.raconteur.moc.platform.PlatformService
 import java.nio.file.Path
 import kotlin.io.path.createParentDirectories
 import kotlin.io.path.exists
@@ -14,7 +15,7 @@ object MocSettings {
     private val defaultIgnoredPaths = listOf("mods", "resourcepacks", "config/moc.json", "config/moc")
 
     private fun settingsPath(): Path =
-        ModpackOptionControl.getInstanceDir().resolve("config/moc.json")
+        PlatformService.INSTANCE.getConfigDir().resolve("moc.json")
 
     private val data: JsonObject by lazy {
         val path = settingsPath()

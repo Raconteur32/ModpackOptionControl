@@ -22,7 +22,7 @@ object McInstanceCategory {
         t.set("get_files", object : ZeroArgFunction() {
             override fun call(): LuaValue {
                 val result = LuaTable()
-                McInstanceMocFileSystem.getFiles().forEachIndexed { i, file ->
+                McInstanceMocFileSystem.files.forEachIndexed { i, file ->
                     result.set(i + 1, valueOf(file.relativePath.toString()))
                 }
                 return result
@@ -32,7 +32,7 @@ object McInstanceCategory {
         t.set("get_file", object : OneArgFunction() {
             override fun call(path: LuaValue): LuaValue {
                 val relativePath = Path.of(path.checkjstring())
-                val file = McInstanceMocFileSystem.getFiles().find { it.relativePath == relativePath }
+                val file = McInstanceMocFileSystem.files.find { it.relativePath == relativePath }
                     ?: throw LuaError("File not found: $relativePath")
                 return CoerceJavaToLua.coerce(MocFileAPIWrapper(file))
             }
