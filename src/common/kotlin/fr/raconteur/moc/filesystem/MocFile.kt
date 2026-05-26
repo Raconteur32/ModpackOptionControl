@@ -15,8 +15,6 @@ import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
-import kotlin.io.path.createParentDirectories
-import kotlin.io.path.exists
 
 class MocFile(
     val fileSystem: MocFileSystem,
@@ -25,28 +23,22 @@ class MocFile(
     val encoding: String
     val contentType: ContentType
     val diffAlg: String
-    private val metadataValues: MutableMap<String, String>
 
     init {
-        val metaFile = getMetadataPath()
-
-        if (metaFile.exists()) {
-            metadataValues = loadMetadata(metaFile)
-            encoding = metadataValues["encoding"] ?: StandardCharsets.UTF_8.name()
-            contentType = metadataValues["content"]
-                ?.let { ContentTypeRegistry.findById(it) }
-                ?: TextContentType
-            diffAlg = metadataValues["diffalg"] ?: DEFAULT_DIFF_ALG
+        val metadata = fileSystem.getFileMetadata(relativePath)
+        if (metadata != null) {
+            encoding = metadata["encoding"] ?: StandardCharsets.UTF_8.name()
+            contentType = metadata["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
+            diffAlg = metadata["diffalg"] ?: DEFAULT_DIFF_ALG
         } else {
-            metadataValues = mutableMapOf()
             encoding = detectEncoding(getAbsolutePath())
             contentType = inferContentType()
             diffAlg = DEFAULT_DIFF_ALG
-            metadataValues["encoding"] = encoding
-            metadataValues["content"] = contentType.id
-            metadataValues["diffalg"] = diffAlg
-            metaFile.createParentDirectories()
-            writeMetadata(metaFile, metadataValues)
+            fileSystem.setFileMetadata(relativePath, mapOf(
+                "encoding" to encoding,
+                "content" to contentType.id,
+                "diffalg" to diffAlg
+            ))
         }
     }
 
@@ -62,10 +54,6 @@ class MocFile(
     }
 
     fun getAbsolutePath(): Path = fileSystem.getRootPath().resolve(relativePath)
-
-    fun getMetadataPath(): Path =
-        fileSystem.getMetadataPath().resolve("$relativePath.metadata")
-
     fun getFileName(): String = relativePath.fileName.toString()
 
     fun getStringContent(): String =
@@ -75,9 +63,7 @@ class MocFile(
         getAbsolutePath().toFile().writeText(text, Charset.forName(encoding))
 
     fun getContent(): JsonElement = contentType.getContent(this)
-
     fun setContent(content: JsonElement) = contentType.setContent(this, content)
-
     fun getFlatContent(): FlatContent = contentType.getFlatContent(this)
 
     fun diffFrom(other: MocFile): FlatContentDiff {
@@ -88,7 +74,6 @@ class MocFile(
     private fun inferContentType(): ContentType {
         var bestType: ContentType? = null
         var bestScore = 0
-
         for (type in ContentTypeRegistry.getAll()) {
             val score = type.checkConfidenceScore(this)
             if (score > bestScore) {
@@ -96,28 +81,23 @@ class MocFile(
                 bestScore = score
             }
         }
-
         return if (bestScore == 0) TextContentType else bestType!!
     }
 
     private fun detectEncoding(path: Path): String {
         if (isBinary(path)) throw IllegalArgumentException("File appears to be binary: $path")
-
         detectBOM(path)?.let { return it }
-
         val data = Files.readAllBytes(path)
         val detector = CharsetDetector()
         detector.setText(data)
         val match = detector.detect()
         if (match != null && match.confidence >= 50) return match.name
-
         try {
             StandardCharsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
                 .decode(ByteBuffer.wrap(data))
             return StandardCharsets.UTF_8.name()
         } catch (_: Exception) {}
-
         return Charset.defaultCharset().name()
     }
 
@@ -146,18 +126,5 @@ class MocFile(
                     && bytes[1] == 0xFE.toByte() -> "UTF-16LE"
             else -> null
         }
-    }
-
-    private fun loadMetadata(path: Path): MutableMap<String, String> =
-        path.toFile().readLines()
-            .filter { '=' in it }
-            .associate { line ->
-                val idx = line.indexOf('=')
-                line.substring(0, idx).trim() to line.substring(idx + 1).trim()
-            }
-            .toMutableMap()
-
-    private fun writeMetadata(path: Path, data: Map<String, String>) {
-        path.toFile().writeText(data.entries.joinToString("\n") { "${it.key}=${it.value}" })
     }
 }
