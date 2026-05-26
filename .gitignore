@@ -38,6 +38,10 @@ remappedSources/
 
 doc/
 
+# generated scripts
+
+run-cli.sh
+
 # java
 
 hs_err_*.log

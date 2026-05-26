@@ -1,15 +1,16 @@
 package fr.raconteur.moc.filesystem
 
-import fr.raconteur.moc.content.DiffType
 import fr.raconteur.moc.content.FlatContentDiff
 
+enum class FileDiffKind { NEW, DELETED, CHANGED }
+
 class MocFileDiff private constructor(
-    val diffType: DiffType,
+    val kind: FileDiffKind,
     val flatContentDiff: FlatContentDiff?
 ) {
     companion object {
-        fun new() = MocFileDiff(DiffType.NEW, null)
-        fun deleted() = MocFileDiff(DiffType.DELETED, null)
-        fun changed(flatContentDiff: FlatContentDiff) = MocFileDiff(DiffType.CHANGED, flatContentDiff)
+        fun new()     = MocFileDiff(FileDiffKind.NEW, null)
+        fun deleted() = MocFileDiff(FileDiffKind.DELETED, null)
+        fun changed(flatContentDiff: FlatContentDiff) = MocFileDiff(FileDiffKind.CHANGED, flatContentDiff)
     }
 }

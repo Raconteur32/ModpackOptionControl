@@ -66,6 +66,19 @@ tasks.register<JavaExec>("runCli") {
 	classpath = sourceSets["cli"].runtimeClasspath
 	mainClass.set("fr.raconteur.moc.cli.MainKt")
 	jvmArgs("--enable-native-access=ALL-UNNAMED")
+	standardInput = System.`in`
+}
+
+tasks.register("generateCliScript") {
+	group = "application"
+	dependsOn("compileCliKotlin", "compileCommonKotlin", "processResources")
+	doLast {
+		val cp = sourceSets["cli"].runtimeClasspath.asPath
+		val script = rootProject.file("run-cli.sh")
+		script.writeText("#!/bin/bash\nexec java --enable-native-access=ALL-UNNAMED -cp \"$cp\" fr.raconteur.moc.cli.MainKt \"\$@\"\n")
+		script.setExecutable(true)
+		println("Script généré : ${script.absolutePath}")
+	}
 }
 
 tasks.processResources {
