@@ -21,6 +21,17 @@ import java.nio.file.Files
 
 private enum class BrowseMode { FILES, DIFF, VALUE }
 
+private fun openFileIdeDiff(filePath: java.nio.file.Path, kind: FileDiffKind) {
+    val ext = filePath.toString().substringAfterLast('.', "txt")
+    val oldContent = if (kind != FileDiffKind.NEW)
+        McInstanceRefMocFileSystem.files.find { it.relativePath == filePath }?.getStringContent() ?: ""
+    else ""
+    val newContent = if (kind != FileDiffKind.DELETED)
+        McInstanceMocFileSystem.files.find { it.relativePath == filePath }?.getStringContent() ?: ""
+    else ""
+    openIdeDiff(oldContent, newContent, ext)
+}
+
 private fun openIdeDiff(oldValue: Any?, newValue: Any?, extension: String) {
     val suffix = if (extension.startsWith('.')) extension else ".$extension"
     val oldFile = Files.createTempFile("moc-old-", suffix).also { it.toFile().writeText(oldValue?.toString() ?: "") }
@@ -76,7 +87,7 @@ fun runDiffBrowser() {
                     }
                     textLine()
                     green { text("+ nouveau") }; text("   "); red { text("- supprimé") }; text("   "); yellow { textLine("~ modifié") }
-                    textLine("↑↓ naviguer   ↵ ouvrir   q quitter")
+                    textLine("↑↓ naviguer   ↵ ouvrir   i diff IDE   q quitter")
                 }
 
                 BrowseMode.DIFF -> {
@@ -109,7 +120,7 @@ fun runDiffBrowser() {
                     textLine()
                     green { text("+ nouveau") }; text("   "); red { text("- supprimé") }; text("   "); yellow { textLine("~ modifié") }
                     val escHint = if (pathStack.size > 1) "esc remonter" else "esc retour"
-                    textLine("↑↓ naviguer   ↵ entrer   $escHint   q quitter")
+                    textLine("↑↓ naviguer   ↵ entrer   i diff IDE   $escHint   q quitter")
                 }
 
                 BrowseMode.VALUE -> {
@@ -167,6 +178,10 @@ fun runDiffBrowser() {
                     BrowseMode.FILES -> when (key) {
                         Keys.UP    -> if (fileIndex > 0) fileIndex--
                         Keys.DOWN  -> if (fileIndex < entries.size - 1) fileIndex++
+                        CharKey('i') -> {
+                            val (path, fileDiff) = entries[fileIndex]
+                            openFileIdeDiff(path, fileDiff.kind)
+                        }
                         Keys.ENTER -> {
                             val fileDiff = entries[fileIndex].value
                             if (fileDiff.kind == FileDiffKind.CHANGED) {
@@ -188,6 +203,10 @@ fun runDiffBrowser() {
                         val allPaths = entries[fileIndex].value.flatContentDiff?.keys?.filter { it != "$" }?.toList() ?: emptyList()
                         val visible = directChildren(allPaths, pathStack.last())
                         when (key) {
+                            CharKey('i') -> {
+                                val (path, fileDiff) = entries[fileIndex]
+                                openFileIdeDiff(path, fileDiff.kind)
+                            }
                             Keys.UP    -> if (diffIndex > 0) diffIndex--
                             Keys.DOWN  -> if (diffIndex < visible.size - 1) diffIndex++
                             Keys.ENTER -> {
