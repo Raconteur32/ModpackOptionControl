@@ -7,8 +7,8 @@ class FileSystemDiff(
     private val map: MutableMap<Path, MocFileDiff> = mutableMapOf()
 ) : Map<Path, MocFileDiff> by map {
 
-    fun addNew(path: Path)     { map[path] = MocFileDiff.new() }
-    fun addDeleted(path: Path) { map[path] = MocFileDiff.deleted() }
+    fun addNew(path: Path, diff: FlatContentDiff)     { map[path] = MocFileDiff.new(diff) }
+    fun addDeleted(path: Path, diff: FlatContentDiff) { map[path] = MocFileDiff.deleted(diff) }
     fun addChanged(path: Path, diff: FlatContentDiff) { map[path] = MocFileDiff.changed(diff) }
 
     fun getNewPaths()     : Set<Path> = map.filterValues { it.kind == FileDiffKind.NEW }.keys

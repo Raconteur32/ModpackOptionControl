@@ -26,7 +26,6 @@ class FlatContentDiff private constructor(
     }
 
     fun getNewPaths()     = filterValues { it is OptionDiff.New }.keys
-    fun getChangedPaths() = filterValues { it is OptionDiff.Changed }.keys
     fun getDeletedPaths() = filterValues { it is OptionDiff.Deleted }.keys
     fun getChangedPaths() = filterValues { it is OptionDiff.Changed }.keys
 }

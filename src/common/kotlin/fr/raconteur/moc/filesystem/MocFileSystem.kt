@@ -65,8 +65,14 @@ open class MocFileSystem(
         val thisFiles = files.associateBy { it.relativePath }
         val otherFiles = other.files.associateBy { it.relativePath }
 
-        for (path in otherFiles.keys - thisFiles.keys) result.addDeleted(path)
-        for (path in thisFiles.keys - otherFiles.keys) result.addNew(path)
+        for (path in otherFiles.keys - thisFiles.keys) {
+            val ghostCurrent = MocFile(this, path)
+            result.addDeleted(path, ghostCurrent.diffFrom(otherFiles[path]!!))
+        }
+        for (path in thisFiles.keys - otherFiles.keys) {
+            val ghostRef = MocFile(other, path)
+            result.addNew(path, thisFiles[path]!!.diffFrom(ghostRef))
+        }
         for (path in thisFiles.keys intersect otherFiles.keys) {
             val contentDiff = thisFiles[path]!!.diffFrom(otherFiles[path]!!)
             if (contentDiff.isNotEmpty()) result.addChanged(path, contentDiff)

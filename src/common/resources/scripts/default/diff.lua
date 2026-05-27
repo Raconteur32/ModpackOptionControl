@@ -12,6 +12,9 @@ local function is_array(val)
 end
 
 function M.diff(from, to, flat_diff)
+    local file_path = to:get_relative_path()
+    print("[diff] START " .. file_path)
+
     local from_flat = from:get_flat_content()
     local to_flat   = to:get_flat_content()
 
@@ -21,6 +24,7 @@ function M.diff(from, to, flat_diff)
     -- Deletions: from ascending
     for _, path in ipairs(from_keys) do
         if to_flat[path] == nil then
+            print("[diff] add_deleted " .. path .. " old=" .. tostring(from_flat[path]))
             flat_diff:add_deleted(path, from_flat[path])
         end
     end
@@ -31,6 +35,7 @@ function M.diff(from, to, flat_diff)
         local to_val = to_flat[path]
 
         if from_flat[path] == nil then
+            print("[diff] add_new " .. path .. " val=" .. tostring(to_val))
             flat_diff:add_new(path, to_val)
             if is_array(to_val) then
                 flat_diff:cut_branch(path)
@@ -38,6 +43,7 @@ function M.diff(from, to, flat_diff)
         else
             if type(to_val) == "table" then
                 if flat_diff:has_leaf(path) then
+                    print("[diff] add_changed(structural) " .. path)
                     flat_diff:add_changed(path, nil, nil)
                     if is_array(to_val) then
                         flat_diff:cut_branch(path)
@@ -45,6 +51,7 @@ function M.diff(from, to, flat_diff)
                 end
             else
                 if from_flat[path] ~= to_val then
+                    print("[diff] add_changed " .. path .. " old=" .. tostring(from_flat[path]) .. " new=" .. tostring(to_val))
                     flat_diff:add_changed(path, from_flat[path], to_val)
                 end
             end
@@ -52,6 +59,7 @@ function M.diff(from, to, flat_diff)
     end
 
     flat_diff:rationalize()
+    print("[diff] END " .. file_path)
 end
 
 return M

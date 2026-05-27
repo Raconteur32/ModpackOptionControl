@@ -6,11 +6,11 @@ enum class FileDiffKind { NEW, DELETED, CHANGED }
 
 class MocFileDiff private constructor(
     val kind: FileDiffKind,
-    val flatContentDiff: FlatContentDiff?
+    val flatContentDiff: FlatContentDiff
 ) {
     companion object {
-        fun new()     = MocFileDiff(FileDiffKind.NEW, null)
-        fun deleted() = MocFileDiff(FileDiffKind.DELETED, null)
+        fun new(flatContentDiff: FlatContentDiff)     = MocFileDiff(FileDiffKind.NEW, flatContentDiff)
+        fun deleted(flatContentDiff: FlatContentDiff) = MocFileDiff(FileDiffKind.DELETED, flatContentDiff)
         fun changed(flatContentDiff: FlatContentDiff) = MocFileDiff(FileDiffKind.CHANGED, flatContentDiff)
     }
 }

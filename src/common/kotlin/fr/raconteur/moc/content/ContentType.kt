@@ -20,9 +20,9 @@ abstract class ContentType {
     abstract fun setContent(file: MocFile, content: JsonElement)
 
     open fun checkConfidenceScore(file: MocFile): Int {
-        var score = 0
+        if (!hasValidContent(file)) return 0
+        var score = 1
         if (hasPreferredExtension(file.getFileName())) score += 2
-        if (hasValidContent(file)) score += 1
         return score
     }
 

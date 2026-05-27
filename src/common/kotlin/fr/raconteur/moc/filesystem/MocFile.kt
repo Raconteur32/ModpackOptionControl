@@ -1,6 +1,7 @@
 package fr.raconteur.moc.filesystem
 
 import com.google.gson.JsonElement
+import com.google.gson.JsonPrimitive
 import com.ibm.icu.text.CharsetDetector
 import fr.raconteur.moc.content.ContentType
 import fr.raconteur.moc.content.ContentTypeRegistry
@@ -23,27 +24,11 @@ class MocFile(
     val encoding: String
     val contentType: ContentType
     val diffAlg: String
-
-    init {
-        val metadata = fileSystem.getFileMetadata(relativePath)
-        if (metadata != null) {
-            encoding = metadata["encoding"] ?: StandardCharsets.UTF_8.name()
-            contentType = metadata["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
-            diffAlg = metadata["diffalg"] ?: DEFAULT_DIFF_ALG
-        } else {
-            encoding = detectEncoding(getAbsolutePath())
-            contentType = inferContentType()
-            diffAlg = DEFAULT_DIFF_ALG
-            fileSystem.setFileMetadata(relativePath, mapOf(
-                "encoding" to encoding,
-                "content" to contentType.id,
-                "diffalg" to diffAlg
-            ))
-        }
-    }
+    val exists: Boolean
 
     companion object {
         const val DEFAULT_DIFF_ALG = "default/diff"
+        const val MOC_NOTHING = ""
 
         fun isBinary(path: Path): Boolean {
             val buffer = ByteArray(8000)
@@ -53,18 +38,54 @@ class MocFile(
         }
     }
 
+    init {
+        exists = getAbsolutePath().toFile().exists()
+
+        if (!exists) {
+            encoding = StandardCharsets.UTF_8.name()
+            contentType = TextContentType
+            diffAlg = DEFAULT_DIFF_ALG
+        } else {
+            val metadata = fileSystem.getFileMetadata(relativePath)
+            if (metadata != null) {
+                encoding = metadata["encoding"] ?: StandardCharsets.UTF_8.name()
+                contentType = metadata["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
+                diffAlg = metadata["diffalg"] ?: DEFAULT_DIFF_ALG
+            } else {
+                encoding = detectEncoding(getAbsolutePath())
+                contentType = inferContentType()
+                diffAlg = DEFAULT_DIFF_ALG
+                fileSystem.setFileMetadata(relativePath, mapOf(
+                    "encoding" to encoding,
+                    "content" to contentType.id,
+                    "diffalg" to diffAlg
+                ))
+            }
+        }
+    }
+
     fun getAbsolutePath(): Path = fileSystem.getRootPath().resolve(relativePath)
     fun getFileName(): String = relativePath.fileName.toString()
 
-    fun getStringContent(): String =
-        getAbsolutePath().toFile().readText(Charset.forName(encoding))
+    fun getStringContent(): String {
+        if (!exists) return MOC_NOTHING
+        return getAbsolutePath().toFile().readText(Charset.forName(encoding))
+    }
 
     fun setStringContent(text: String) =
         getAbsolutePath().toFile().writeText(text, Charset.forName(encoding))
 
-    fun getContent(): JsonElement = contentType.getContent(this)
+    fun getContent(): JsonElement {
+        if (!exists) return JsonPrimitive(MOC_NOTHING)
+        return contentType.getContent(this)
+    }
+
     fun setContent(content: JsonElement) = contentType.setContent(this, content)
-    fun getFlatContent(): FlatContent = contentType.getFlatContent(this)
+
+    fun getFlatContent(): FlatContent {
+        if (!exists) return FlatContent(emptyMap())
+        return contentType.getFlatContent(this)
+    }
 
     fun diffFrom(other: MocFile): FlatContentDiff {
         val ctx = DiffLuaContext(diffAlg)
