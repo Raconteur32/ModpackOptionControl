@@ -12,8 +12,8 @@ class DiffLuaContext(moduleName: String) : MocLuaContext(moduleName) {
         if (!hasFunction("diff")) throw RuntimeException("Module '$moduleName' has no diff function")
     }
 
-    fun diff(from: MocFileAPIWrapper, to: MocFileAPIWrapper): FlatContentDiff {
-        val flatContentDiff = FlatContentDiff()
+    fun diff(from: MocFileAPIWrapper, to: MocFileAPIWrapper, filePath: String): FlatContentDiff {
+        val flatContentDiff = FlatContentDiff(filePath)
         callLuaFunction(
             "diff",
             CoerceJavaToLua.coerce(from),

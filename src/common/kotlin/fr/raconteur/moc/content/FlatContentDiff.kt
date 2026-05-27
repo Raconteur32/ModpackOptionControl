@@ -1,14 +1,15 @@
 package fr.raconteur.moc.content
 
 class FlatContentDiff private constructor(
-    private val map: MutableMap<String, DiffType>
-) : Map<String, DiffType> by map {
+    val filePath: String,
+    private val map: MutableMap<String, OptionDiff>
+) : Map<String, OptionDiff> by map {
 
-    constructor() : this(mutableMapOf())
+    constructor(filePath: String) : this(filePath, mutableMapOf())
 
-    fun addNew(path: String, newValue: Any?)                   { map[path] = DiffType.New(path, newValue) }
-    fun addDeleted(path: String, oldValue: Any?)               { map[path] = DiffType.Deleted(path, oldValue) }
-    fun addChanged(path: String, oldValue: Any?, newValue: Any?) { map[path] = DiffType.Changed(path, oldValue, newValue) }
+    fun addNew(path: String, newValue: Any?)                     { map[path] = OptionDiff.New(filePath, path, newValue) }
+    fun addDeleted(path: String, oldValue: Any?)                 { map[path] = OptionDiff.Deleted(filePath, path, oldValue) }
+    fun addChanged(path: String, oldValue: Any?, newValue: Any?) { map[path] = OptionDiff.Changed(filePath, path, oldValue, newValue) }
 
     fun hasLeaf(path: String): Boolean =
         keys.any { it != path && (it.startsWith(path + ".") || it.startsWith(path + "[")) }
@@ -20,11 +21,12 @@ class FlatContentDiff private constructor(
 
     fun rationalize() {
         keys.sorted()
-            .filter { map[it] is DiffType.Deleted }
+            .filter { map[it] is OptionDiff.Deleted }
             .forEach { cutBranch(it) }
     }
 
-    fun getNewPaths()     = filterValues { it is DiffType.New }.keys
-    fun getDeletedPaths() = filterValues { it is DiffType.Deleted }.keys
-    fun getChangedPaths() = filterValues { it is DiffType.Changed }.keys
+    fun getNewPaths()     = filterValues { it is OptionDiff.New }.keys
+    fun getChangedPaths() = filterValues { it is OptionDiff.Changed }.keys
+    fun getDeletedPaths() = filterValues { it is OptionDiff.Deleted }.keys
+    fun getChangedPaths() = filterValues { it is OptionDiff.Changed }.keys
 }

@@ -12,7 +12,7 @@ import com.varabyte.kotter.foundation.text.red
 import com.varabyte.kotter.foundation.text.text
 import com.varabyte.kotter.foundation.text.textLine
 import com.varabyte.kotter.foundation.text.yellow
-import fr.raconteur.moc.content.DiffType
+import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.FileDiffKind
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
@@ -109,9 +109,9 @@ fun runDiffBrowser() {
                             val hasChildren = directChildren(allPaths, path).isNotEmpty()
                             val arrow = if (hasChildren) " ▶" else ""
                             when (entry) {
-                                is DiffType.New     -> green  { textLine("$cursor+ $path$arrow") }
-                                is DiffType.Deleted -> red    { textLine("$cursor- $path$arrow") }
-                                is DiffType.Changed -> yellow { textLine("$cursor~ $path$arrow") }
+                                is OptionDiff.New     -> green  { textLine("$cursor+ $path$arrow") }
+                                is OptionDiff.Deleted -> red    { textLine("$cursor- $path$arrow") }
+                                is OptionDiff.Changed -> yellow { textLine("$cursor~ $path$arrow") }
                                 null                -> textLine("$cursor? $path$arrow")
                             }
                         }
@@ -134,17 +134,17 @@ fun runDiffBrowser() {
                     textLine()
 
                     when {
-                        entry is DiffType.New -> {
+                        entry is OptionDiff.New -> {
                             green { textLine("+ Nouveau") }
                             textLine()
                             textLine("  Valeur : ${preview(entry.newValue)}")
                         }
-                        entry is DiffType.Deleted -> {
+                        entry is OptionDiff.Deleted -> {
                             red { textLine("- Supprimé") }
                             textLine()
                             textLine("  Ancienne valeur : ${preview(entry.oldValue)}")
                         }
-                        entry is DiffType.Changed -> {
+                        entry is OptionDiff.Changed -> {
                             red   { textLine("  Avant : ${preview(entry.oldValue)}") }
                             green { textLine("  Après : ${preview(entry.newValue)}") }
                         }
@@ -168,7 +168,7 @@ fun runDiffBrowser() {
                     }
 
                     textLine()
-                    if (entry is DiffType.Changed) textLine("esc retour   i ouvrir dans l'IDE   q quitter")
+                    if (entry is OptionDiff.Changed) textLine("esc retour   i ouvrir dans l'IDE   q quitter")
                     else textLine("esc retour   q quitter")
                 }
             }
@@ -238,7 +238,7 @@ fun runDiffBrowser() {
                         CharKey('i') -> {
                             val fileDiff = entries[fileIndex].value
                             val entry = valuePath?.let { fileDiff.flatContentDiff?.get(it) }
-                            if (entry is DiffType.Changed) {
+                            if (entry is OptionDiff.Changed) {
                                 val ext = entries[fileIndex].key.toString().substringAfterLast('.', "txt")
                                 openIdeDiff(entry.oldValue, entry.newValue, ext)
                             }

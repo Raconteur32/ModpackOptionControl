@@ -68,7 +68,7 @@ class MocFile(
 
     fun diffFrom(other: MocFile): FlatContentDiff {
         val ctx = DiffLuaContext(diffAlg)
-        return ctx.diff(MocFileAPIWrapper(other), MocFileAPIWrapper(this))
+        return ctx.diff(MocFileAPIWrapper(other), MocFileAPIWrapper(this), relativePath.toString())
     }
 
     private fun inferContentType(): ContentType {
