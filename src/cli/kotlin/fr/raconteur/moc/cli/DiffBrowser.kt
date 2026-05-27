@@ -131,7 +131,7 @@ fun runDiffBrowser() {
                     val (_, fileDiff) = entries[fileIndex]
                     val entry = valuePath?.let { fileDiff.flatContentDiff[it] }
                     fun preview(v: Any?) = v?.toString()?.replace("\n", "↵")?.take(120)?.let {
-                        if ((v?.toString()?.length ?: 0) > 120) "$it…" else it
+                        if ((v.toString().length ?: 0) > 120) "$it…" else it
                     } ?: "null"
 
                     bold { textLine(valuePath ?: "") }
