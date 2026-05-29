@@ -23,6 +23,7 @@ import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.lua.ScriptUtils
 import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchEntry
+import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.PatchMode
 import java.nio.file.Files
 import java.nio.file.Path
@@ -84,8 +85,9 @@ fun runDiffBrowser() {
         var diffIndex     by liveVarOf(0)
         var pathStack     by liveVarOf(listOf("$"))
         var valuePath     by liveVarOf<String?>(null)
-        var draftEntries  by liveVarOf(DraftPatch.entries.toList())
-        var patchName     by liveVarOf("")
+        var draftEntries   by liveVarOf(DraftPatch.entries.toList())
+        var patchName      by liveVarOf("")
+        var patchNameError by liveVarOf<String?>(null)
 
         fun draftForFile(filePath: Path) = draftEntries.firstOrNull { it.filePath == filePath.toString() && it.optionPath == "$" }
             ?: draftEntries.firstOrNull { it.filePath == filePath.toString() }
@@ -196,13 +198,24 @@ fun runDiffBrowser() {
                     textLine()
                     text("Nom : "); input()
                     textLine()
-                    textLine("↵ confirmer   esc annuler")
+                    if (patchNameError != null) {
+                        red { textLine(patchNameError!!) }
+                    } else {
+                        textLine()
+                    }
+                    val confirmHint = if (patchNameError == null && patchName.isNotBlank()) "↵ confirmer   " else ""
+                    textLine("${confirmHint}esc annuler")
                 }
             }
         }.runUntilKeyPressed(Keys.Q) {
-            onInputChanged { patchName = input }
+            onInputChanged {
+                patchName = input
+                patchNameError = if (input.isNotBlank() && PatchList.contains(input))
+                    "« $input » est déjà utilisé"
+                else null
+            }
             onInputEntered {
-                if (mode == BrowseMode.FINALIZE && patchName.isNotBlank()) {
+                if (mode == BrowseMode.FINALIZE && patchName.isNotBlank() && patchNameError == null) {
                     DraftPatch.finalize(patchName)
                     draftEntries = DraftPatch.entries.toList()
                     patchName = ""

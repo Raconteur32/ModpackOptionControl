@@ -89,6 +89,7 @@ object DraftPatch {
     }
 
     fun finalize(patchName: String): Patch {
+        require(!PatchList.contains(patchName)) { "Patch « $patchName » already exists" }
         val dir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName")
         dir.toFile().mkdirs()
 

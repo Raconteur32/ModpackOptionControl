@@ -21,6 +21,8 @@ object PatchList {
         }
     }
 
+    fun contains(patchName: String): Boolean = getAll().contains(patchName)
+
     fun add(patchName: String) {
         val names = getAll().toMutableList()
         names.add(patchName)
