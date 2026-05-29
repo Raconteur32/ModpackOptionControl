@@ -12,10 +12,10 @@ class FlatContentDiff private constructor(
     fun addChanged(path: String, oldValue: Any?, newValue: Any?) { map[path] = OptionDiff.Changed(filePath, path, oldValue, newValue) }
 
     fun hasLeaf(path: String): Boolean =
-        keys.any { it != path && (it.startsWith(path + ".") || it.startsWith(path + "[")) }
+        keys.any { it != path && (it.startsWith("$path.") || it.startsWith("$path[")) }
 
     fun cutBranch(path: String) {
-        keys.filter { it != path && (it.startsWith(path + ".") || it.startsWith(path + "[")) }
+        keys.filter { it != path && (it.startsWith("$path.") || it.startsWith("$path[")) }
             .forEach { map.remove(it) }
     }
 

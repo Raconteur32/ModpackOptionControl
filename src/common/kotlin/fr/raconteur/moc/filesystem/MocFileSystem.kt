@@ -8,10 +8,13 @@ import com.jayway.jsonpath.JsonPath
 import com.jayway.jsonpath.PathNotFoundException
 import com.jayway.jsonpath.spi.json.GsonJsonProvider
 import com.jayway.jsonpath.spi.mapper.GsonMappingProvider
+import fr.raconteur.moc.content.ContentTypeRegistry
+import fr.raconteur.moc.content.TextContentType
 import fr.raconteur.moc.versioning.EntryKind
 import fr.raconteur.moc.versioning.Patch
 import fr.raconteur.moc.versioning.PatchEntry
 import fr.raconteur.moc.versioning.PatchMode
+import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.isDirectory
@@ -24,36 +27,86 @@ open class MocFileSystem(
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val metadataJsonFile: Path = rootPath.resolve(".mocmetadata.json")
     private val allMetadata: MutableMap<String, MutableMap<String, String>> = loadAllMetadata()
-    private var metadataDirty = false
 
-    private var _files: List<MocFile> = scanFiles()
-    val files: List<MocFile> get() = _files
-
-    init {
-        if (metadataDirty) saveAllMetadata()
-    }
+    private var _files: MutableMap<Path, MocFile>? = null
+    val files: Collection<MocFile>
+        get() {
+            if (_files == null) _files = scanFiles()
+            return _files!!.values
+        }
 
     fun getRootPath(): Path = rootPath
     fun getMetadataFile(): Path = metadataJsonFile
-    fun hasFile(relativePath: Path): Boolean = files.any { it.relativePath == relativePath }
+    fun hasFile(relativePath: Path): Boolean { files; return _files?.containsKey(relativePath) == true }
 
     internal fun getFileMetadata(relativePath: Path): Map<String, String>? =
         allMetadata[relativePath.toString()]
 
-    internal fun setFileMetadata(relativePath: Path, metadata: Map<String, String>) {
-        allMetadata[relativePath.toString()] = metadata.toMutableMap()
-        metadataDirty = true
+    internal fun register(file: MocFile) {
+        _files?.put(file.relativePath, file)
+        registerMetadata(file)
+    }
+
+    internal fun registerMetadata(file: MocFile) {
+        val newMeta = mapOf("encoding" to file.encoding, "content" to file.contentType.id, "diffalg" to file.diffAlg)
+        val key = file.relativePath.toString()
+        if (allMetadata[key] != newMeta) {
+            allMetadata[key] = newMeta.toMutableMap()
+            saveAllMetadata()
+        }
+    }
+
+    fun removeFile(file: MocFile) {
+        file.getAbsolutePath().toFile().delete()
+        allMetadata.remove(file.relativePath.toString())
+        saveAllMetadata()
+        _files?.remove(file.relativePath)
     }
 
     fun reload() {
-        metadataDirty = false
         _files = scanFiles()
-        if (metadataDirty) saveAllMetadata()
     }
 
     fun applyPatch(patch: Patch, forceDelete: Boolean) {
-        for (entry in patch.entries) {
-            if (shouldApply(entry, forceDelete)) applyEntry(entry)
+        val entriesToApply = patch.entries.filter { shouldApply(it, forceDelete) }
+
+        for (entry in entriesToApply.filter { it.optionPath == "" && it.kind == EntryKind.DELETION }) {
+            val file = _files?.get(Path.of(entry.filePath))
+            if (file != null) removeFile(file)
+            else {
+                rootPath.resolve(entry.filePath).toFile().delete()
+                allMetadata.remove(entry.filePath)
+            }
+        }
+
+        val jsonEntries = entriesToApply.filter { it.optionPath != "" }
+
+        val mocFiles: Map<String, MocFile> = jsonEntries.map { it.filePath }.distinct()
+            .associateWith { filePath ->
+                val meta = patch.metadata[filePath] ?: emptyMap()
+                MocFile.ensureWritable(
+                    this, Path.of(filePath),
+                    encoding    = meta["encoding"] ?: StandardCharsets.UTF_8.name(),
+                    contentType = meta["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType,
+                    diffAlg     = meta["diffalg"] ?: MocFile.DEFAULT_DIFF_ALG
+                )
+            }
+
+        for ((filePath, entries) in jsonEntries.groupBy { it.filePath }) {
+            val file = mocFiles[filePath] ?: continue
+            var content = if (file.exists) file.getStringContent() ?: "{}" else "{}"
+            for (entry in entries) {
+                content = when (entry.kind) {
+                    EntryKind.VALUE    -> setJsonValue(content, entry.optionPath, entry.toValue)
+                    EntryKind.DELETION -> removeJsonKey(content, entry.optionPath)
+                }
+            }
+            file.setContent(gson.fromJson(content, JsonElement::class.java))
+        }
+
+        if (patch.metadata.isNotEmpty()) {
+            for ((fp, meta) in patch.metadata) allMetadata[fp] = meta.toMutableMap()
+            saveAllMetadata()
         }
     }
 
@@ -68,38 +121,13 @@ open class MocFileSystem(
 
     private fun entryExists(entry: PatchEntry): Boolean {
         val path = Path.of(entry.filePath)
-        if (entry.optionPath == "$") return hasFile(path)
-        val file = files.find { it.relativePath == path } ?: return false
-        return file.getFlatContent().containsKey(entry.optionPath)
-    }
-
-    private fun applyEntry(entry: PatchEntry) {
-        val absPath = rootPath.resolve(entry.filePath).toFile()
-        if (entry.optionPath == "$") {
-            when (entry.kind) {
-                EntryKind.VALUE -> {
-                    absPath.parentFile.mkdirs()
-                    absPath.writeText(gson.toJson(entry.toValue))
-                }
-                EntryKind.DELETION -> absPath.delete()
-            }
-        } else {
-            when (entry.kind) {
-                EntryKind.VALUE -> {
-                    val content = if (absPath.exists()) absPath.readText() else "{}"
-                    absPath.parentFile.mkdirs()
-                    absPath.writeText(setJsonValue(content, entry.optionPath, entry.toValue))
-                }
-                EntryKind.DELETION -> {
-                    if (absPath.exists()) {
-                        absPath.writeText(removeJsonKey(absPath.readText(), entry.optionPath))
-                    }
-                }
-            }
-        }
+        if (entry.optionPath == "$" || entry.optionPath == "") return hasFile(path)
+        val file = _files?.get(path) ?: return false
+        return file.getFlatContent()?.containsKey(entry.optionPath) == true
     }
 
     private fun setJsonValue(content: String, optionPath: String, value: Any?): String {
+        if (optionPath == "$") return gson.toJson(gson.toJsonTree(value))
         val config = Configuration.builder()
             .jsonProvider(GsonJsonProvider())
             .mappingProvider(GsonMappingProvider())
@@ -109,7 +137,6 @@ open class MocFileSystem(
         try {
             document.set(optionPath, jsonValue)
         } catch (_: PathNotFoundException) {
-            // Path doesn't exist yet — try to create via parent
             val lastDot = optionPath.lastIndexOf('.')
             if (lastDot > 1) {
                 val parentPath = optionPath.substring(0, lastDot)
@@ -130,7 +157,7 @@ open class MocFileSystem(
         return gson.toJson(document.read<JsonElement>("$"))
     }
 
-    private fun scanFiles(): List<MocFile> = if (!rootPath.isDirectory()) emptyList() else
+    private fun scanFiles(): MutableMap<Path, MocFile> = if (!rootPath.isDirectory()) mutableMapOf() else
         Files.walk(rootPath)
             .filter { file ->
                 file.isRegularFile()
@@ -138,8 +165,9 @@ open class MocFileSystem(
                     && ignoredPaths.none { file.startsWith(rootPath.resolve(it)) }
                     && !MocFile.isBinary(file)
             }
-            .map { MocFile(this, rootPath.relativize(it)) }
+            .map { MocFile.load(this, rootPath.relativize(it)) }
             .toList()
+            .associateByTo(mutableMapOf()) { it.relativePath }
 
     private fun loadAllMetadata(): MutableMap<String, MutableMap<String, String>> {
         if (!metadataJsonFile.toFile().exists()) return mutableMapOf()
@@ -158,16 +186,18 @@ open class MocFileSystem(
 
     fun diffFrom(other: MocFileSystem): FileSystemDiff {
         val result = FileSystemDiff()
-        val thisFiles = files.associateBy { it.relativePath }
-        val otherFiles = other.files.associateBy { it.relativePath }
+        val thisFiles  = _files ?: emptyMap()
+        val otherFiles = other._files ?: emptyMap()
 
         for (path in otherFiles.keys - thisFiles.keys) {
-            val ghostCurrent = MocFile(this, path)
-            result.addDeleted(path, ghostCurrent.diffFrom(otherFiles[path]!!))
+            val otherFile = otherFiles[path]!!
+            val ghostCurrent = MocFile.ghost(this, path, otherFile.encoding, otherFile.contentType, otherFile.diffAlg)
+            result.addDeleted(path, ghostCurrent.diffFrom(otherFile))
         }
         for (path in thisFiles.keys - otherFiles.keys) {
-            val ghostRef = MocFile(other, path)
-            result.addNew(path, thisFiles[path]!!.diffFrom(ghostRef))
+            val current = thisFiles[path]!!
+            val ghostRef = MocFile.ghost(other, path, current.encoding, current.contentType, current.diffAlg)
+            result.addNew(path, current.diffFrom(ghostRef))
         }
         for (path in thisFiles.keys intersect otherFiles.keys) {
             val contentDiff = thisFiles[path]!!.diffFrom(otherFiles[path]!!)

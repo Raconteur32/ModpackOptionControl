@@ -17,7 +17,7 @@ object JsonContentType : ContentType() {
         extensions.any { filename.endsWith(it) }
 
     override fun hasValidContent(file: MocFile): Boolean {
-        val content = file.getStringContent()
+        val content = file.getStringContent() ?: return false
         if (content.isBlank()) return false
         return try {
             gson.fromJson(content, JsonElement::class.java) != null
@@ -26,8 +26,8 @@ object JsonContentType : ContentType() {
         }
     }
 
-    override fun getContent(file: MocFile): JsonElement {
-        val content = file.getStringContent()
+    override fun getContent(file: MocFile): JsonElement? {
+        val content = file.getStringContent() ?: return null
         return gson.fromJson(content, JsonElement::class.java)
     }
 

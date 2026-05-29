@@ -13,7 +13,7 @@ object TextContentType : ContentType() {
 
     override fun checkConfidenceScore(file: MocFile) = 3
 
-    override fun getContent(file: MocFile): JsonElement = JsonPrimitive(file.getStringContent())
+    override fun getContent(file: MocFile): JsonElement? = file.getStringContent()?.let { JsonPrimitive(it) }
 
     override fun setContent(file: MocFile, content: JsonElement) =
         file.setStringContent(content.asString)

@@ -15,7 +15,7 @@ abstract class ContentType {
 
     abstract fun hasValidContent(file: MocFile): Boolean
 
-    abstract fun getContent(file: MocFile): JsonElement
+    abstract fun getContent(file: MocFile): JsonElement?
 
     abstract fun setContent(file: MocFile, content: JsonElement)
 
@@ -26,8 +26,8 @@ abstract class ContentType {
         return score
     }
 
-    fun getFlatContent(file: MocFile): FlatContent {
-        val element = getContent(file)
+    fun getFlatContent(file: MocFile): FlatContent? {
+        val element = getContent(file) ?: return null
         val pathConfig = Configuration.builder()
             .jsonProvider(GsonJsonProvider())
             .mappingProvider(GsonMappingProvider())

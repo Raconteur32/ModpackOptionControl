@@ -9,7 +9,7 @@ object McInstanceRefMocFileSystem : MocFileSystem(
     rootPath = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev-ref"),
     ignoredPaths = MocSettings.ignoredPaths
 ) {
-    fun generate() {
+    fun regenerateRefFiles() {
         getRootPath().toFile().walkTopDown()
             .sortedDescending()
             .filter { it != getRootPath().toFile() }
@@ -17,9 +17,7 @@ object McInstanceRefMocFileSystem : MocFileSystem(
 
         for (patchName in PatchList.getAll()) {
             val patch = Patch.load(patchName)
-            reload()
-            applyPatch(patch, forceDelete = true)
+            MocFileSystem(getRootPath(), MocSettings.ignoredPaths).applyPatch(patch, forceDelete = true)
         }
-        reload()
     }
 }

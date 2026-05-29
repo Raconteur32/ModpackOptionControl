@@ -7,6 +7,7 @@ import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.platform.PlatformService
 import java.nio.file.Path
+import java.nio.file.Paths
 
 object DraftPatch {
     private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -88,10 +89,20 @@ object DraftPatch {
     }
 
     fun finalize(patchName: String): Patch {
-        val dest = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName.json").toFile()
-        dest.parentFile.mkdirs()
-        dest.writeText(gson.toJson(_entries))
-        val patch = Patch(patchName, _entries.toList())
+        val dir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName")
+        dir.toFile().mkdirs()
+
+        dir.resolve("patch.json").toFile().writeText(gson.toJson(_entries))
+
+        val patchFilePaths = _entries.map { it.filePath }.toSet()
+        val metaType = object : TypeToken<Map<String, Map<String, String>>>() {}.type
+        val allMeta: Map<String, Map<String, String>> = try {
+            gson.fromJson(McInstanceMocFileSystem.getMetadataFile().toFile().readText(), metaType) ?: emptyMap()
+        } catch (_: Exception) { emptyMap() }
+        val filteredMeta = allMeta.filter { (key, _) -> key in patchFilePaths }
+        dir.resolve(".mocmeta.json").toFile().writeText(gson.toJson(filteredMeta))
+
+        val patch = Patch(patchName, _entries.toList(), filteredMeta)
         PatchList.add(patchName)
         McInstanceRefMocFileSystem.applyPatch(patch, forceDelete = true)
         clear()
