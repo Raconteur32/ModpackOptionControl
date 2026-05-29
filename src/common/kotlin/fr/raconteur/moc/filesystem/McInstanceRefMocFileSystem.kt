@@ -19,5 +19,7 @@ object McInstanceRefMocFileSystem : MocFileSystem(
             val patch = Patch.load(patchName)
             MocFileSystem(getRootPath(), MocSettings.ignoredPaths).applyPatch(patch, forceDelete = true)
         }
+
+        reload()
     }
 }

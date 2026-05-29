@@ -28,22 +28,20 @@ open class MocFileSystem(
     private val metadataJsonFile: Path = rootPath.resolve(".mocmetadata.json")
     private val allMetadata: MutableMap<String, MutableMap<String, String>> = loadAllMetadata()
 
-    private var _files: MutableMap<Path, MocFile>? = null
-    val files: Collection<MocFile>
-        get() {
-            if (_files == null) _files = scanFiles()
-            return _files!!.values
-        }
+    private val _files: MutableMap<Path, MocFile> = mutableMapOf()
+    val files: Collection<MocFile> get() = _files.values
+
+    init { scan() }
 
     fun getRootPath(): Path = rootPath
     fun getMetadataFile(): Path = metadataJsonFile
-    fun hasFile(relativePath: Path): Boolean { files; return _files?.containsKey(relativePath) == true }
+    fun hasFile(relativePath: Path): Boolean = _files.containsKey(relativePath)
 
     internal fun getFileMetadata(relativePath: Path): Map<String, String>? =
         allMetadata[relativePath.toString()]
 
     internal fun register(file: MocFile) {
-        _files?.put(file.relativePath, file)
+        _files[file.relativePath] = file
         registerMetadata(file)
     }
 
@@ -60,18 +58,19 @@ open class MocFileSystem(
         file.getAbsolutePath().toFile().delete()
         allMetadata.remove(file.relativePath.toString())
         saveAllMetadata()
-        _files?.remove(file.relativePath)
+        _files.remove(file.relativePath)
     }
 
     fun reload() {
-        _files = scanFiles()
+        _files.clear()
+        scan()
     }
 
     fun applyPatch(patch: Patch, forceDelete: Boolean) {
         val entriesToApply = patch.entries.filter { shouldApply(it, forceDelete) }
 
         for (entry in entriesToApply.filter { it.optionPath == "" && it.kind == EntryKind.DELETION }) {
-            val file = _files?.get(Path.of(entry.filePath))
+            val file = _files[Path.of(entry.filePath)]
             if (file != null) removeFile(file)
             else {
                 rootPath.resolve(entry.filePath).toFile().delete()
@@ -122,7 +121,7 @@ open class MocFileSystem(
     private fun entryExists(entry: PatchEntry): Boolean {
         val path = Path.of(entry.filePath)
         if (entry.optionPath == "$" || entry.optionPath == "") return hasFile(path)
-        val file = _files?.get(path) ?: return false
+        val file = _files[path] ?: return false
         return file.getFlatContent()?.containsKey(entry.optionPath) == true
     }
 
@@ -157,7 +156,8 @@ open class MocFileSystem(
         return gson.toJson(document.read<JsonElement>("$"))
     }
 
-    private fun scanFiles(): MutableMap<Path, MocFile> = if (!rootPath.isDirectory()) mutableMapOf() else
+    private fun scan() {
+        if (!rootPath.isDirectory()) return
         Files.walk(rootPath)
             .filter { file ->
                 file.isRegularFile()
@@ -165,9 +165,8 @@ open class MocFileSystem(
                     && ignoredPaths.none { file.startsWith(rootPath.resolve(it)) }
                     && !MocFile.isBinary(file)
             }
-            .map { MocFile.load(this, rootPath.relativize(it)) }
-            .toList()
-            .associateByTo(mutableMapOf()) { it.relativePath }
+            .forEach { MocFile.load(this, rootPath.relativize(it)) }
+    }
 
     private fun loadAllMetadata(): MutableMap<String, MutableMap<String, String>> {
         if (!metadataJsonFile.toFile().exists()) return mutableMapOf()
@@ -186,21 +185,19 @@ open class MocFileSystem(
 
     fun diffFrom(other: MocFileSystem): FileSystemDiff {
         val result = FileSystemDiff()
-        val thisFiles  = _files ?: emptyMap()
-        val otherFiles = other._files ?: emptyMap()
 
-        for (path in otherFiles.keys - thisFiles.keys) {
-            val otherFile = otherFiles[path]!!
+        for (path in other._files.keys - _files.keys) {
+            val otherFile = other._files[path]!!
             val ghostCurrent = MocFile.ghost(this, path, otherFile.encoding, otherFile.contentType, otherFile.diffAlg)
             result.addDeleted(path, ghostCurrent.diffFrom(otherFile))
         }
-        for (path in thisFiles.keys - otherFiles.keys) {
-            val current = thisFiles[path]!!
+        for (path in _files.keys - other._files.keys) {
+            val current = _files[path]!!
             val ghostRef = MocFile.ghost(other, path, current.encoding, current.contentType, current.diffAlg)
             result.addNew(path, current.diffFrom(ghostRef))
         }
-        for (path in thisFiles.keys intersect otherFiles.keys) {
-            val contentDiff = thisFiles[path]!!.diffFrom(otherFiles[path]!!)
+        for (path in _files.keys intersect other._files.keys) {
+            val contentDiff = _files[path]!!.diffFrom(other._files[path]!!)
             if (contentDiff.isNotEmpty()) result.addChanged(path, contentDiff)
         }
 
