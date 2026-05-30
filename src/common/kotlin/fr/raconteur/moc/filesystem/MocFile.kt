@@ -1,14 +1,15 @@
 package fr.raconteur.moc.filesystem
 
+import com.google.gson.JsonArray
 import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
 import com.ibm.icu.text.CharsetDetector
 import fr.raconteur.moc.content.ContentType
 import fr.raconteur.moc.content.ContentTypeRegistry
 import fr.raconteur.moc.content.FlatContent
 import fr.raconteur.moc.content.FlatContentDiff
 import fr.raconteur.moc.content.TextContentType
-import fr.raconteur.moc.lua.DiffLuaContext
-import fr.raconteur.moc.lua.api.MocFileAPIWrapper
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
@@ -21,12 +22,9 @@ class MocFile private constructor(
     val relativePath: Path,
     val encoding: String,
     val contentType: ContentType,
-    val diffAlg: String,
     val exists: Boolean
 ) {
     companion object {
-        const val DEFAULT_DIFF_ALG = "default/diff"
-
         fun load(fileSystem: MocFileSystem, relativePath: Path): MocFile {
             val absPath = fileSystem.getRootPath().resolve(relativePath)
             if (!absPath.toFile().exists()) throw RuntimeException("File does not exist: $absPath")
@@ -34,20 +32,17 @@ class MocFile private constructor(
             val metadata = fileSystem.getFileMetadata(relativePath)
             val encoding: String
             val contentType: ContentType
-            val diffAlg: String
 
             if (metadata != null) {
                 encoding    = metadata["encoding"] ?: StandardCharsets.UTF_8.name()
                 contentType = metadata["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
-                diffAlg     = metadata["diffalg"] ?: DEFAULT_DIFF_ALG
             } else {
                 encoding = detectEncoding(absPath)
-                val probe = MocFile(fileSystem, relativePath, encoding, TextContentType, DEFAULT_DIFF_ALG, exists = true)
+                val probe = MocFile(fileSystem, relativePath, encoding, TextContentType, exists = true)
                 contentType = inferContentType(probe)
-                diffAlg = DEFAULT_DIFF_ALG
             }
 
-            val file = MocFile(fileSystem, relativePath, encoding, contentType, diffAlg, exists = true)
+            val file = MocFile(fileSystem, relativePath, encoding, contentType, exists = true)
             fileSystem.register(file)
             return file
         }
@@ -56,11 +51,10 @@ class MocFile private constructor(
             fileSystem: MocFileSystem,
             relativePath: Path,
             encoding: String,
-            contentType: ContentType,
-            diffAlg: String
+            contentType: ContentType
         ): MocFile {
             val exists = fileSystem.getRootPath().resolve(relativePath).toFile().exists()
-            val file = MocFile(fileSystem, relativePath, encoding, contentType, diffAlg, exists)
+            val file = MocFile(fileSystem, relativePath, encoding, contentType, exists)
             fileSystem.register(file)
             return file
         }
@@ -69,11 +63,10 @@ class MocFile private constructor(
             fileSystem: MocFileSystem,
             relativePath: Path,
             encoding: String,
-            contentType: ContentType,
-            diffAlg: String
+            contentType: ContentType
         ): MocFile {
             val exists = fileSystem.getRootPath().resolve(relativePath).toFile().exists()
-            return MocFile(fileSystem, relativePath, encoding, contentType, diffAlg, exists)
+            return MocFile(fileSystem, relativePath, encoding, contentType, exists)
         }
 
         fun isBinary(path: Path): Boolean {
@@ -167,7 +160,48 @@ class MocFile private constructor(
     }
 
     fun diffFrom(other: MocFile): FlatContentDiff {
-        val ctx = DiffLuaContext(diffAlg)
-        return ctx.diff(MocFileAPIWrapper(other), MocFileAPIWrapper(this), relativePath.toString())
+        val diff = FlatContentDiff(relativePath.toString())
+        val fromFlat = other.getFlatContent() ?: FlatContent(emptyMap())
+        val toFlat = getFlatContent()
+
+        if (toFlat == null) {
+            diff.addDeleted("", fromFlat["$"])
+            return diff
+        }
+
+        for (path in fromFlat.keys.sorted()) {
+            if (!toFlat.containsKey(path)) diff.addDeleted(path, fromFlat[path])
+        }
+
+        for (path in toFlat.keys.sortedDescending()) {
+            val toVal = toFlat[path]
+            if (!fromFlat.containsKey(path)) {
+                diff.addNew(path, toVal)
+                if (toVal is JsonArray) diff.cutBranch(path)
+            } else {
+                val fromVal = fromFlat[path]
+                when {
+                    toVal is JsonObject || toVal is JsonArray -> {
+                        if (diff.hasLeaf(path)) {
+                            diff.addChanged(path, fromVal, toVal)
+                            if (toVal is JsonArray) diff.cutBranch(path)
+                        }
+                    }
+                    !jsonValuesEqual(fromVal, toVal) -> diff.addChanged(path, fromVal, toVal)
+                }
+            }
+        }
+
+        diff.rationalize()
+        return diff
+    }
+
+    private fun jsonValuesEqual(a: Any?, b: Any?): Boolean {
+        if (a === b) return true
+        if (a is JsonPrimitive && b is JsonPrimitive) {
+            if (a.isNumber && b.isNumber) return a.asString == b.asString
+            return a == b
+        }
+        return a == b
     }
 }

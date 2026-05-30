@@ -48,7 +48,7 @@ open class MocFileSystem(
     }
 
     internal fun registerMetadata(file: MocFile) {
-        val newMeta = mapOf("encoding" to file.encoding, "content" to file.contentType.id, "diffalg" to file.diffAlg)
+        val newMeta = mapOf("encoding" to file.encoding, "content" to file.contentType.id)
         val key = file.relativePath.toString()
         if (allMetadata[key] != newMeta) {
             allMetadata[key] = newMeta.toMutableMap()
@@ -88,8 +88,7 @@ open class MocFileSystem(
                 MocFile.ensureWritable(
                     this, Path.of(filePath),
                     encoding    = meta["encoding"] ?: StandardCharsets.UTF_8.name(),
-                    contentType = meta["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType,
-                    diffAlg     = meta["diffalg"] ?: MocFile.DEFAULT_DIFF_ALG
+                    contentType = meta["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
                 )
             }
 
@@ -210,12 +209,12 @@ open class MocFileSystem(
 
         for (path in other._files.keys - _files.keys) {
             val otherFile = other._files[path]!!
-            val ghostCurrent = MocFile.ghost(this, path, otherFile.encoding, otherFile.contentType, otherFile.diffAlg)
+            val ghostCurrent = MocFile.ghost(this, path, otherFile.encoding, otherFile.contentType)
             result.addDeleted(path, ghostCurrent.diffFrom(otherFile))
         }
         for (path in _files.keys - other._files.keys) {
             val current = _files[path]!!
-            val ghostRef = MocFile.ghost(other, path, current.encoding, current.contentType, current.diffAlg)
+            val ghostRef = MocFile.ghost(other, path, current.encoding, current.contentType)
             result.addNew(path, current.diffFrom(ghostRef))
         }
         for (path in _files.keys intersect other._files.keys) {

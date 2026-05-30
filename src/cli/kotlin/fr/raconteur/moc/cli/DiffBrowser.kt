@@ -20,7 +20,6 @@ import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.FileDiffKind
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
-import fr.raconteur.moc.lua.ScriptUtils
 import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchEntry
 import fr.raconteur.moc.versioning.PatchList
@@ -82,8 +81,6 @@ private fun draftTag(entry: PatchEntry?, hasSub: Boolean): String = when {
 }
 
 fun runDiffBrowser() {
-    ScriptUtils.ensureScripts()
-
     session {
         var mode           by liveVarOf(BrowseMode.FILES)
         var previousMode   by liveVarOf(BrowseMode.FILES)

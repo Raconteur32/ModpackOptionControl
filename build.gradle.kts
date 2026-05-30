@@ -47,13 +47,11 @@ dependencies {
 
 	// Common deps — available to both common and main (via configuration extension)
 	"commonImplementation"("com.ibm.icu:icu4j:76.1")
-	"commonImplementation"("org.luaj:luaj-jse:3.0.1")
 	"commonImplementation"("com.jayway.jsonpath:json-path:2.9.0")
 	"commonImplementation"("com.google.code.gson:gson:2.11.0")
 
 	// Embedded in the mod JAR via Jar-in-Jar
 	include("com.ibm.icu:icu4j:76.1")
-	include("org.luaj:luaj-jse:3.0.1")
 	include("com.jayway.jsonpath:json-path:2.9.0")
 
 	// CLI deps
