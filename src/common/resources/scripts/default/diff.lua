@@ -11,10 +11,14 @@ local function sorted_keys(t)
     return keys
 end
 
--- Détecte si une valeur est un tableau JSON (table Lua avec des indices entiers).
--- Un objet vide {} a #val == 0 et n'est donc pas considéré comme un tableau.
+-- Détecte si une valeur est un tableau JSON.
+-- Utilise le metatable __is_array posé par jsonToLua (côté Kotlin) ou moc.utils.get_empty_array().
+-- Repli sur #val > 0 pour les tables sans metatable (compatibilité).
 local function is_array(val)
-    return type(val) == "table" and #val > 0
+    if type(val) ~= "table" then return false end
+    local mt = getmetatable(val)
+    if mt then return mt.__is_array == true end
+    return #val > 0
 end
 
 -- Calcule le diff entre deux fichiers MOC.
@@ -22,10 +26,10 @@ end
 -- `to`   : état courant (nouvelle version)
 -- `flat_diff` : accumulateur de résultat (FlatContentDiff côté Kotlin)
 function M.diff(from, to, flat_diff)
-    -- Si `from` n'existe pas, on utilise une table vide : chaque clé de `to`
+    -- Si `from` n'existe pas, on utilise une map vide taguée : chaque clé de `to`
     -- sera naturellement traitée comme un ajout par le reste de la logique,
     -- avec la granularité normale (une entrée par chemin, pas un seul bloc "$").
-    local from_flat = from:get_flat_content() or {}
+    local from_flat = from:get_flat_content() or api.utils.get_empty_map()
     local to_flat   = to:get_flat_content()
 
     -- Cas : `to` n'existe pas sur disque (fichier supprimé).

@@ -8,6 +8,7 @@ object MocLuaAPI {
         val api = LuaTable()
         api.set("mcinstance", McInstanceCategory.buildTable())
         api.set("diff", DiffCategory.buildTable())
+        api.set("utils", UtilsCategory.buildTable())
         return api
     }
 }
