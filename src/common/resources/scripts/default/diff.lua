@@ -82,7 +82,7 @@ function M.diff(from, to, flat_diff)
                 -- structurellement et mérite une entrée "changed" sans valeurs
                 -- (nil, nil) pour signaler le changement au niveau du conteneur.
                 if flat_diff:has_leaf(path) then
-                    flat_diff:add_changed(path, nil, nil)
+                    flat_diff:add_changed(path, from_flat[path], to_val)
 
                     -- Même logique que pour les ajouts : si la nouvelle valeur
                     -- est un tableau, les entrées enfants indexées sont redondantes.

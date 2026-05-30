@@ -26,7 +26,20 @@ class FlatContentDiffAPIWrapper(private val flatContentDiff: FlatContentDiff) {
         is BigInteger   -> value
         is BigDecimal   -> value
         is LuaTable     -> luaTableToJava(value)
+        is LuaValue     -> sanitizeLuaValue(value)
         else            -> null
+    }
+
+    private fun sanitizeLuaValue(v: LuaValue): Any? = when {
+        v.isnil()                            -> null
+        v.isboolean()                        -> v.toboolean()
+        v.isuserdata(BigInteger::class.java) -> v.touserdata() as BigInteger
+        v.isuserdata(BigDecimal::class.java) -> v.touserdata() as BigDecimal
+        v.isint()                            -> v.toint()
+        v.isnumber()                         -> v.todouble()
+        v.isstring()                         -> v.tojstring()
+        v.istable()                          -> luaTableToJava(v.checktable())
+        else                                 -> null
     }
 
     private fun luaTableToJava(table: LuaTable): Any {

@@ -28,10 +28,8 @@ object DraftPatch {
 
         val currentDiff = McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem)
 
-        val raw: List<PatchEntry> = try {
-            val type = object : TypeToken<List<PatchEntry>>() {}.type
-            gson.fromJson(file.readText(), type) ?: return
-        } catch (_: Exception) { return }
+        val type = object : TypeToken<List<PatchEntry>>() {}.type
+        val raw: List<PatchEntry> = gson.fromJson(file.readText(), type) ?: return
 
         raw.filter { entry ->
             val fileDiff = currentDiff[Path.of(entry.filePath)] ?: return@filter false
@@ -49,7 +47,11 @@ object DraftPatch {
     private fun valueEquals(a: Any?, b: Any?): Boolean {
         if (a == b) return true
         if (a is Number && b is Number) return a.toDouble() == b.toDouble()
-        return a?.toString() == b?.toString()
+        if (a is Map<*, *> && b is Map<*, *>)
+            return a.size == b.size && a.keys == b.keys && a.keys.all { k -> valueEquals(a[k], b[k]) }
+        if (a is List<*> && b is List<*>)
+            return a.size == b.size && a.indices.all { i -> valueEquals(a[i], b[i]) }
+        return false
     }
 
     fun setValueEntry(diff: OptionDiff.New, mode: PatchMode) =

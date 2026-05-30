@@ -180,6 +180,7 @@ open class MocFileSystem(
     }
 
     private fun saveAllMetadata() {
+        metadataJsonFile.parent?.toFile()?.mkdirs()
         metadataJsonFile.toFile().writeText(gson.toJson(allMetadata))
     }
 
