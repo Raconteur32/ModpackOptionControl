@@ -83,8 +83,6 @@ private fun draftTag(entry: PatchEntry?, hasSub: Boolean): String = when {
 
 fun runDiffBrowser() {
     ScriptUtils.ensureScripts()
-    val diff = McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem)
-    val entries = diff.entries.sortedBy { it.key.toString() }
 
     session {
         var mode           by liveVarOf(BrowseMode.FILES)
@@ -98,6 +96,7 @@ fun runDiffBrowser() {
         var patchNameError by liveVarOf<String?>(null)
         var confirmMessage by liveVarOf<String?>(null)
         var confirmAction  by liveVarOf<(() -> Unit)?>(null)
+        var entries        by liveVarOf(McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem).entries.sortedBy { it.key.toString() })
 
         // Entry directe sur le fichier entier (optionPath "$" ou "" pour les fichiers supprimés)
         fun draftFileEntry(filePath: Path): PatchEntry? =
@@ -270,9 +269,13 @@ fun runDiffBrowser() {
             onInputEntered {
                 if (mode == BrowseMode.FINALIZE && patchName.isNotBlank() && patchNameError == null) {
                     DraftPatch.finalize(patchName)
+                    entries    = McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem).entries.sortedBy { it.key.toString() }
+                    fileIndex  = 0
+                    diffIndex  = 0
+                    pathStack  = listOf("$")
                     draftEntries = DraftPatch.entries.toList()
-                    patchName = ""
-                    mode = BrowseMode.FILES
+                    patchName  = ""
+                    mode       = BrowseMode.FILES
                 }
             }
             onKeyPressed {

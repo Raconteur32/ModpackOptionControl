@@ -2,8 +2,10 @@ package fr.raconteur.moc.filesystem
 
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.jayway.jsonpath.Configuration
+import com.jayway.jsonpath.DocumentContext
 import com.jayway.jsonpath.JsonPath
 import com.jayway.jsonpath.PathNotFoundException
 import com.jayway.jsonpath.spi.json.GsonJsonProvider
@@ -132,18 +134,37 @@ open class MocFileSystem(
             .mappingProvider(GsonMappingProvider())
             .build()
         val document = JsonPath.using(config).parse(content)
-        val jsonValue = gson.toJsonTree(value)
-        try {
-            document.set(optionPath, jsonValue)
-        } catch (_: PathNotFoundException) {
-            val lastDot = optionPath.lastIndexOf('.')
-            if (lastDot > 1) {
-                val parentPath = optionPath.substring(0, lastDot)
-                val key = optionPath.substring(lastDot + 1)
-                try { document.put(parentPath, key, jsonValue) } catch (_: Exception) {}
-            }
-        }
+        ensureAndSet(document, optionPath, gson.toJsonTree(value))
         return gson.toJson(document.read<JsonElement>("$"))
+    }
+
+    // Crée récursivement les noeuds intermédiaires manquants avant de setter la valeur.
+    // Gère la notation bracket ($['a']['b']) et dot ($.a.b).
+    private fun ensureAndSet(document: DocumentContext, path: String, value: JsonElement) {
+        try { document.set(path, value); return } catch (_: PathNotFoundException) {}
+        val (parentPath, key) = splitLastSegment(path) ?: return
+        try { document.read<Any>(parentPath) } catch (_: PathNotFoundException) {
+            ensureAndSet(document, parentPath, JsonObject())
+        }
+        try { document.put(parentPath, key, value) } catch (_: Exception) {}
+    }
+
+    private fun splitLastSegment(path: String): Pair<String, String>? {
+        val lastBracket = path.lastIndexOf('[')
+        val lastDot = path.lastIndexOf('.')
+        return when {
+            lastBracket > lastDot && lastBracket > 0 -> {
+                val parent = path.substring(0, lastBracket)
+                val key = path.substring(lastBracket + 1, path.length - 1).trim('\'', '"')
+                if (parent.isNotEmpty()) parent to key else null
+            }
+            lastDot > 0 -> {
+                val parent = path.substring(0, lastDot)
+                val key = path.substring(lastDot + 1)
+                if (parent.isNotEmpty()) parent to key else null
+            }
+            else -> null
+        }
     }
 
     private fun removeJsonKey(content: String, optionPath: String): String {
