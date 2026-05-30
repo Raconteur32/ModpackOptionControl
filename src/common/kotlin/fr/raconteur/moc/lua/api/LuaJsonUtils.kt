@@ -20,7 +20,7 @@ fun jsonToLua(element: JsonElement): LuaValue = when (element) {
         element.isBoolean -> LuaValue.valueOf(element.asBoolean)
         element.isNumber  -> {
             val bd = element.asBigDecimal
-            if (bd.stripTrailingZeros().scale() <= 0) {
+            if (bd.scale() <= 0) {
                 val bi = bd.toBigInteger()
                 if (bi >= BigInteger.valueOf(Int.MIN_VALUE.toLong()) && bi <= BigInteger.valueOf(Int.MAX_VALUE.toLong()))
                     LuaValue.valueOf(bi.toInt())

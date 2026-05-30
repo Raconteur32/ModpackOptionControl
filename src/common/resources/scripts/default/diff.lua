@@ -21,6 +21,16 @@ local function is_array(val)
     return #val > 0
 end
 
+-- Compare deux scalaires en tenant compte du type numérique (entier vs décimal).
+-- Sans ce contrôle, LuaJ traite 1 == 1.0, masquant les changements int → float.
+local function values_equal(a, b)
+    if a ~= b then return false end
+    if type(a) == "number" then
+        return api.utils.is_integer(a) == api.utils.is_integer(b)
+    end
+    return true
+end
+
 -- Calcule le diff entre deux fichiers MOC.
 -- `from` : état de référence (ancienne version)
 -- `to`   : état courant (nouvelle version)
@@ -94,8 +104,8 @@ function M.diff(from, to, flat_diff)
                 -- fait rien (pas d'entrée dans le diff).
             else
                 -- Valeur scalaire (string, number, boolean) : comparaison directe.
-                -- On n'enregistre une modification que si la valeur a réellement changé.
-                if from_flat[path] ~= to_val then
+                -- values_equal distingue int et float (1 ~= 1.0) via is_integer.
+                if not values_equal(from_flat[path], to_val) then
                     flat_diff:add_changed(path, from_flat[path], to_val)
                 end
             end

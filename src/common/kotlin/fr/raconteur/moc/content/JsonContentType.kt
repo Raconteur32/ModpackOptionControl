@@ -5,13 +5,14 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonSyntaxException
 import com.google.gson.Strictness
 import fr.raconteur.moc.filesystem.MocFile
+import fr.raconteur.moc.versioning.registerSmartAnyDeserializer
 
 object JsonContentType : ContentType() {
     override val id = "json"
 
     private val extensions = listOf(".json", ".json5")
-    private val gson = GsonBuilder().setStrictness(Strictness.LENIENT).create()
-    private val gsonWriter = GsonBuilder().setPrettyPrinting().create()
+    private val gson = GsonBuilder().setStrictness(Strictness.LENIENT).registerSmartAnyDeserializer().create()
+    private val gsonWriter = GsonBuilder().setPrettyPrinting().registerSmartAnyDeserializer().create()
 
     override fun hasPreferredExtension(filename: String): Boolean =
         extensions.any { filename.endsWith(it) }

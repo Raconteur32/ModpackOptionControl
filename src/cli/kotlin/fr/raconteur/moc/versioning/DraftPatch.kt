@@ -10,7 +10,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 object DraftPatch {
-    private val gson = GsonBuilder().setPrettyPrinting().create()
+    private val gson = GsonBuilder().setPrettyPrinting().registerSmartAnyDeserializer().create()
     private val draftPath: Path
         get() = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/patch-draft.json")
 
@@ -46,7 +46,9 @@ object DraftPatch {
 
     private fun valueEquals(a: Any?, b: Any?): Boolean {
         if (a == b) return true
-        if (a is Number && b is Number) return a.toDouble() == b.toDouble()
+        if (a is Number && b is Number) return try {
+            java.math.BigDecimal(a.toString()).compareTo(java.math.BigDecimal(b.toString())) == 0
+        } catch (_: Exception) { false }
         if (a is Map<*, *> && b is Map<*, *>)
             return a.size == b.size && a.keys == b.keys && a.keys.all { k -> valueEquals(a[k], b[k]) }
         if (a is List<*> && b is List<*>)
