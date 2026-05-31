@@ -15,6 +15,12 @@
 	"icon": "assets/moc/icon.png",
 	"environment": "*",
 	"entrypoints": {
+		"preLaunch": [
+			{
+				"value": "fr.raconteur.moc.MocPreLaunchEntrypoint",
+				"adapter": "kotlin"
+			}
+		],
 		"main": [
 			{
 				"value": "fr.raconteur.moc.ModpackOptionControl",
