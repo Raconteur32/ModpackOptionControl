@@ -2,6 +2,7 @@ package fr.raconteur.moc.versioning
 
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
+import de.marhali.json5.Json5Element
 import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
@@ -10,7 +11,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 object DraftPatch {
-    private val gson = GsonBuilder().setPrettyPrinting().registerSmartAnyDeserializer().create()
+    private val gson = GsonBuilder().setPrettyPrinting().registerPreciseNumberStrategy().create()
     private val draftPath: Path
         get() = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/patch-draft.json")
 
@@ -45,15 +46,36 @@ object DraftPatch {
     }
 
     private fun valueEquals(a: Any?, b: Any?): Boolean {
-        if (a == b) return true
-        if (a is Number && b is Number) return try {
-            java.math.BigDecimal(a.toString()).compareTo(java.math.BigDecimal(b.toString())) == 0
+        val na = json5ToNative(a)
+        val nb = json5ToNative(b)
+        if (na == nb) return true
+        if (na is Number && nb is Number) return try {
+            java.math.BigDecimal(na.toString()).compareTo(java.math.BigDecimal(nb.toString())) == 0
         } catch (_: Exception) { false }
-        if (a is Map<*, *> && b is Map<*, *>)
-            return a.size == b.size && a.keys == b.keys && a.keys.all { k -> valueEquals(a[k], b[k]) }
-        if (a is List<*> && b is List<*>)
-            return a.size == b.size && a.indices.all { i -> valueEquals(a[i], b[i]) }
+        if (na is Map<*, *> && nb is Map<*, *>)
+            return na.size == nb.size && na.keys == nb.keys && na.keys.all { k -> valueEquals(na[k], nb[k]) }
+        if (na is List<*> && nb is List<*>)
+            return na.size == nb.size && na.indices.all { i -> valueEquals(na[i], nb[i]) }
         return false
+    }
+
+    private fun json5ToNative(value: Any?): Any? = when (value) {
+        is Json5Element -> when {
+            value.isJson5Null      -> null
+            value.isJson5Primitive -> value.asJson5Primitive.let { p ->
+                when {
+                    p.isBoolean -> p.asBoolean
+                    p.isNumber  -> p.asNumber
+                    else        -> p.asString
+                }
+            }
+            value.isJson5Object -> value.asJson5Object.entrySet()
+                .associate { (k, v) -> k to json5ToNative(v) }
+            value.isJson5Array  -> value.asJson5Array.asList()
+                .map { json5ToNative(it) }
+            else -> null
+        }
+        else -> value
     }
 
     fun setValueEntry(diff: OptionDiff.New, mode: PatchMode) =
@@ -63,14 +85,14 @@ object DraftPatch {
         setValueEntry(diff.filePath, diff.path, diff.oldValue, diff.newValue, mode)
 
     private fun setValueEntry(filePath: String, optionPath: String, fromValue: Any?, toValue: Any?, mode: PatchMode) {
-        val entry = PatchEntry(filePath, optionPath, fromValue, toValue, EntryKind.VALUE, mode)
+        val entry = PatchEntry(filePath, optionPath, json5ToNative(fromValue), json5ToNative(toValue), EntryKind.VALUE, mode)
         _entries.removeIf { it.filePath == entry.filePath && it.optionPath == entry.optionPath }
         _entries.add(entry)
         save()
     }
 
     fun setDeletionEntry(diff: OptionDiff.Deleted, mode: PatchMode) {
-        val entry = PatchEntry(diff.filePath, diff.path, diff.oldValue, null, EntryKind.DELETION, mode)
+        val entry = PatchEntry(diff.filePath, diff.path, json5ToNative(diff.oldValue), null, EntryKind.DELETION, mode)
         _entries.removeIf { it.filePath == entry.filePath && it.optionPath == entry.optionPath }
         _entries.add(entry)
         save()

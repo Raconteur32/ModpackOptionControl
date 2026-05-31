@@ -1,10 +1,10 @@
 package fr.raconteur.moc.filesystem
 
-import com.google.gson.JsonArray
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
-import com.google.gson.JsonPrimitive
 import com.ibm.icu.text.CharsetDetector
+import de.marhali.json5.Json5Array
+import de.marhali.json5.Json5Element
+import de.marhali.json5.Json5Object
+import de.marhali.json5.Json5Primitive
 import fr.raconteur.moc.content.ContentType
 import fr.raconteur.moc.content.ContentTypeRegistry
 import fr.raconteur.moc.content.FlatContent
@@ -147,12 +147,12 @@ class MocFile private constructor(
         getAbsolutePath().toFile().writeText(text, Charset.forName(encoding))
     }
 
-    fun getContent(): JsonElement? {
+    fun getContent(): Json5Element? {
         if (!exists) return null
         return contentType.getContent(this)
     }
 
-    fun setContent(content: JsonElement) = contentType.setContent(this, content)
+    fun setContent(content: Json5Element) = contentType.setContent(this, content)
 
     fun getFlatContent(): FlatContent? {
         if (!exists) return null
@@ -177,14 +177,14 @@ class MocFile private constructor(
             val toVal = toFlat[path]
             if (!fromFlat.containsKey(path)) {
                 diff.addNew(path, toVal)
-                if (toVal is JsonArray) diff.cutBranch(path)
+                if (toVal is Json5Array) diff.cutBranch(path)
             } else {
                 val fromVal = fromFlat[path]
                 when {
-                    toVal is JsonObject || toVal is JsonArray -> {
+                    toVal is Json5Object || toVal is Json5Array -> {
                         if (diff.hasLeaf(path)) {
                             diff.addChanged(path, fromVal, toVal)
-                            if (toVal is JsonArray) diff.cutBranch(path)
+                            if (toVal is Json5Array) diff.cutBranch(path)
                         }
                     }
                     !jsonValuesEqual(fromVal, toVal) -> diff.addChanged(path, fromVal, toVal)
@@ -198,7 +198,7 @@ class MocFile private constructor(
 
     private fun jsonValuesEqual(a: Any?, b: Any?): Boolean {
         if (a === b) return true
-        if (a is JsonPrimitive && b is JsonPrimitive) {
+        if (a is Json5Primitive && b is Json5Primitive) {
             if (a.isNumber && b.isNumber) return a.asString == b.asString
             return a == b
         }

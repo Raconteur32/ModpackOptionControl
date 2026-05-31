@@ -1,11 +1,6 @@
 package fr.raconteur.moc.content
 
-import com.google.gson.JsonElement
-import com.jayway.jsonpath.Configuration
-import com.jayway.jsonpath.JsonPath
-import com.jayway.jsonpath.Option
-import com.jayway.jsonpath.spi.json.GsonJsonProvider
-import com.jayway.jsonpath.spi.mapper.GsonMappingProvider
+import de.marhali.json5.Json5Element
 import fr.raconteur.moc.filesystem.MocFile
 
 abstract class ContentType {
@@ -15,9 +10,9 @@ abstract class ContentType {
 
     abstract fun hasValidContent(file: MocFile): Boolean
 
-    abstract fun getContent(file: MocFile): JsonElement?
+    abstract fun getContent(file: MocFile): Json5Element?
 
-    abstract fun setContent(file: MocFile, content: JsonElement)
+    abstract fun setContent(file: MocFile, content: Json5Element)
 
     open fun checkConfidenceScore(file: MocFile): Int {
         if (!hasValidContent(file)) return 0
@@ -27,19 +22,22 @@ abstract class ContentType {
     }
 
     fun getFlatContent(file: MocFile): FlatContent? {
-        val element = getContent(file) ?: return null
-        val pathConfig = Configuration.builder()
-            .jsonProvider(GsonJsonProvider())
-            .mappingProvider(GsonMappingProvider())
-            .options(Option.AS_PATH_LIST, Option.SUPPRESS_EXCEPTIONS)
-            .build()
-        val valueConfig = Configuration.builder()
-            .jsonProvider(GsonJsonProvider())
-            .mappingProvider(GsonMappingProvider())
-            .build()
-        val pathsRaw: com.google.gson.JsonArray? = JsonPath.using(pathConfig).parse(element).read("$..*")
-        val paths: List<String> = pathsRaw?.map { it.asString } ?: emptyList()
-        val ctx = JsonPath.using(valueConfig).parse(element)
-        return FlatContent((listOf("$") + paths).associate { path -> path to ctx.read<Any?>(path) })
+        val root = getContent(file) ?: return null
+        val entries = mutableMapOf<String, Any?>()
+        flattenInto("$", root, entries)
+        return FlatContent(entries)
+    }
+
+    private fun flattenInto(path: String, element: Json5Element, out: MutableMap<String, Any?>) {
+        out[path] = element
+        when {
+            element.isJson5Object -> for ((key, value) in element.asJson5Object.entrySet())
+                flattenInto("$path['$key']", value, out)
+            element.isJson5Array -> {
+                val arr = element.asJson5Array
+                for (i in 0 until arr.size())
+                    flattenInto("$path[$i]", arr.get(i), out)
+            }
+        }
     }
 }

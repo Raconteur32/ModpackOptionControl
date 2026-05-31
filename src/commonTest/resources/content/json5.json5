@@ -1,0 +1,8 @@
+{
+  "nanVal": NaN,
+  "infVal": Infinity,
+  "negInfVal": -Infinity,
+  "hexVal": 0xFF,
+  "multilineVal": "first line\
+second line"
+}

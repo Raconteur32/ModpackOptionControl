@@ -4,7 +4,7 @@ import com.google.gson.GsonBuilder
 import java.math.BigDecimal
 import java.math.BigInteger
 
-fun GsonBuilder.registerSmartAnyDeserializer(): GsonBuilder =
+fun GsonBuilder.registerPreciseNumberStrategy(): GsonBuilder =
     setObjectToNumberStrategy { reader ->
         val bd = BigDecimal(reader.nextString())
         if (bd.scale() <= 0) {

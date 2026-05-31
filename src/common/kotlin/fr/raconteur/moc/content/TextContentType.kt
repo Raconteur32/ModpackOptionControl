@@ -1,7 +1,7 @@
 package fr.raconteur.moc.content
 
-import com.google.gson.JsonElement
-import com.google.gson.JsonPrimitive
+import de.marhali.json5.Json5Element
+import de.marhali.json5.Json5Primitive
 import fr.raconteur.moc.filesystem.MocFile
 
 object TextContentType : ContentType() {
@@ -13,8 +13,9 @@ object TextContentType : ContentType() {
 
     override fun checkConfidenceScore(file: MocFile) = 3
 
-    override fun getContent(file: MocFile): JsonElement? = file.getStringContent()?.let { JsonPrimitive(it) }
+    override fun getContent(file: MocFile): Json5Element? =
+        file.getStringContent()?.let { Json5Primitive.fromString(it) }
 
-    override fun setContent(file: MocFile, content: JsonElement) =
+    override fun setContent(file: MocFile, content: Json5Element) =
         file.setStringContent(content.asString)
 }

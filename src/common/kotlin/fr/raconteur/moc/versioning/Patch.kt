@@ -10,7 +10,7 @@ class Patch(
     val metadata: Map<String, Map<String, String>> = emptyMap()
 ) {
     companion object {
-        private val gson = GsonBuilder().setPrettyPrinting().registerSmartAnyDeserializer().create()
+        private val gson = GsonBuilder().setPrettyPrinting().registerPreciseNumberStrategy().create()
 
         fun load(patchName: String): Patch {
             val dir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName")

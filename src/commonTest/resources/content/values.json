@@ -1,0 +1,14 @@
+{
+  "intVal": 54,
+  "doubleVal": 3.14,
+  "boolTrue": true,
+  "boolFalse": false,
+  "strVal": "hello",
+  "nested": {
+    "child": 42,
+    "grandchild": {
+      "leaf": "deep"
+    }
+  },
+  "arr": [1, 2, 3]
+}

@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
+import de.marhali.json5.Json5
 import com.jayway.jsonpath.Configuration
 import com.jayway.jsonpath.DocumentContext
 import com.jayway.jsonpath.JsonPath
@@ -27,6 +28,7 @@ open class MocFileSystem(
     private val ignoredPaths: List<Path> = emptyList()
 ) {
     private val gson = GsonBuilder().setPrettyPrinting().create()
+    private val json5 = Json5()
     private val metadataJsonFile: Path = rootPath.resolve(".mocmetadata.json")
     private val allMetadata: MutableMap<String, MutableMap<String, String>> = loadAllMetadata()
 
@@ -101,7 +103,7 @@ open class MocFileSystem(
                     EntryKind.DELETION -> removeJsonKey(content, entry.optionPath)
                 }
             }
-            file.setContent(gson.fromJson(content, JsonElement::class.java))
+            file.setContent(json5.parse(content))
         }
 
         if (patch.metadata.isNotEmpty()) {

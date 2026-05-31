@@ -16,9 +16,17 @@ repositories {
 
 sourceSets {
 	val common by creating
+	val commonTest by creating {
+		compileClasspath += common.output
+		runtimeClasspath += common.output
+	}
 	val cli by creating {
 		compileClasspath += common.output
 		runtimeClasspath += common.output
+	}
+	val cliTest by creating {
+		compileClasspath += common.output + cli.output + commonTest.output
+		runtimeClasspath += common.output + cli.output + commonTest.output
 	}
 	main {
 		compileClasspath += common.output
@@ -32,6 +40,12 @@ configurations {
 	}
 	named("cliImplementation") {
 		extendsFrom(configurations["commonImplementation"])
+	}
+	named("commonTestImplementation") {
+		extendsFrom(configurations["commonImplementation"])
+	}
+	named("cliTestImplementation") {
+		extendsFrom(configurations["cliImplementation"])
 	}
 }
 
@@ -49,14 +63,22 @@ dependencies {
 	"commonImplementation"("com.ibm.icu:icu4j:76.1")
 	"commonImplementation"("com.jayway.jsonpath:json-path:2.9.0")
 	"commonImplementation"("com.google.code.gson:gson:2.11.0")
+	"commonImplementation"("de.marhali:json5-java:3.0.0")
 
 	// Embedded in the mod JAR via Jar-in-Jar
 	include("com.ibm.icu:icu4j:76.1")
 	include("com.jayway.jsonpath:json-path:2.9.0")
+	include("de.marhali:json5-java:3.0.0")
 
 	// CLI deps
 	"cliImplementation"("com.github.ajalt.clikt:clikt:5.0.3")
 	"cliImplementation"("com.varabyte.kotter:kotter-jvm:1.1.2")
+
+	// Test deps (no Minecraft runtime needed)
+	"commonTestImplementation"("org.junit.jupiter:junit-jupiter:5.11.4")
+	"commonTestRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+	"cliTestImplementation"("org.junit.jupiter:junit-jupiter:5.11.4")
+	"cliTestRuntimeOnly"("org.junit.platform:junit-platform-launcher")
 }
 
 tasks.register<JavaExec>("runCli") {
@@ -65,6 +87,22 @@ tasks.register<JavaExec>("runCli") {
 	mainClass.set("fr.raconteur.moc.cli.MainKt")
 	jvmArgs("--enable-native-access=ALL-UNNAMED")
 	standardInput = System.`in`
+}
+
+tasks.register<Test>("testCommon") {
+	group = "verification"
+	description = "Run unit tests for the common sourceset (no Minecraft runtime)"
+	useJUnitPlatform()
+	testClassesDirs = sourceSets["commonTest"].output.classesDirs
+	classpath = sourceSets["commonTest"].runtimeClasspath
+}
+
+tasks.register<Test>("testCli") {
+	group = "verification"
+	description = "Run unit tests for the CLI sourceset (no Minecraft runtime)"
+	useJUnitPlatform()
+	testClassesDirs = sourceSets["cliTest"].output.classesDirs
+	classpath = sourceSets["cliTest"].runtimeClasspath
 }
 
 tasks.register("generateCliScript") {
