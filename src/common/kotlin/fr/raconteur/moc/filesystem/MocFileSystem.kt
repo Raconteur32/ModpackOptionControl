@@ -54,10 +54,9 @@ open class MocFileSystem(
     }
 
     internal fun registerMetadata(file: MocFile) {
-        val newMeta = mapOf("encoding" to file.encoding, "content" to file.contentType.id)
         val key = file.relativePath.toString()
-        if (allMetadata[key] != newMeta) {
-            allMetadata[key] = newMeta.toMutableMap()
+        if (allMetadata[key] != file.metadata) {
+            allMetadata[key] = file.metadata.toMutableMap()
             saveAllMetadata()
         }
     }
@@ -95,8 +94,9 @@ open class MocFileSystem(
                 val meta = patch.metadata[filePath] ?: emptyMap()
                 MocFile.ensureWritable(
                     this, Path.of(filePath),
-                    encoding    = meta["encoding"] ?: StandardCharsets.UTF_8.name(),
-                    contentType = meta["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
+                    encoding         = meta["encoding"] ?: StandardCharsets.UTF_8.name(),
+                    contentType      = meta["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType,
+                    initialMetadata  = meta
                 )
             }
 

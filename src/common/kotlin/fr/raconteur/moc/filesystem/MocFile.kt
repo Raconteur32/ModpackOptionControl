@@ -22,27 +22,39 @@ class MocFile private constructor(
     val relativePath: Path,
     val encoding: String,
     val contentType: ContentType,
-    val exists: Boolean
+    val exists: Boolean,
+    initialMetadata: Map<String, String> = emptyMap()
 ) {
+    val metadata: MutableMap<String, String> = mutableMapOf<String, String>().also {
+        it.putAll(initialMetadata)
+        it["encoding"] = encoding
+        it["content"] = contentType.id
+    }
+
+    fun initContentTypeSpecificMetadata() {
+        metadata.putAll(contentType.getSpecificMetadata(this))
+        fileSystem.registerMetadata(this)
+    }
     companion object {
         fun load(fileSystem: MocFileSystem, relativePath: Path): MocFile {
             val absPath = fileSystem.getRootPath().resolve(relativePath)
             if (!absPath.toFile().exists()) throw RuntimeException("File does not exist: $absPath")
 
-            val metadata = fileSystem.getFileMetadata(relativePath)
+            val savedMeta = fileSystem.getFileMetadata(relativePath)
             val encoding: String
             val contentType: ContentType
 
-            if (metadata != null) {
-                encoding    = metadata["encoding"] ?: StandardCharsets.UTF_8.name()
-                contentType = metadata["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
+            if (savedMeta != null) {
+                encoding    = savedMeta["encoding"] ?: StandardCharsets.UTF_8.name()
+                contentType = savedMeta["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
             } else {
                 encoding = detectEncoding(absPath)
                 val probe = MocFile(fileSystem, relativePath, encoding, TextContentType, exists = true)
                 contentType = inferContentType(probe)
             }
 
-            val file = MocFile(fileSystem, relativePath, encoding, contentType, exists = true)
+            val file = MocFile(fileSystem, relativePath, encoding, contentType, exists = true,
+                initialMetadata = savedMeta ?: emptyMap())
             fileSystem.register(file)
             return file
         }
@@ -51,10 +63,11 @@ class MocFile private constructor(
             fileSystem: MocFileSystem,
             relativePath: Path,
             encoding: String,
-            contentType: ContentType
+            contentType: ContentType,
+            initialMetadata: Map<String, String> = emptyMap()
         ): MocFile {
             val exists = fileSystem.getRootPath().resolve(relativePath).toFile().exists()
-            val file = MocFile(fileSystem, relativePath, encoding, contentType, exists)
+            val file = MocFile(fileSystem, relativePath, encoding, contentType, exists, initialMetadata)
             fileSystem.register(file)
             return file
         }

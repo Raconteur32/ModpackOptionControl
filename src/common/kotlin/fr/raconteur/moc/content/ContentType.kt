@@ -14,6 +14,8 @@ abstract class ContentType {
 
     abstract fun setContent(file: MocFile, content: Json5Element)
 
+    open fun getSpecificMetadata(file: MocFile): Map<String, String> = emptyMap()
+
     open fun checkConfidenceScore(file: MocFile): Int {
         if (!hasValidContent(file)) return 0
         var score = 1
