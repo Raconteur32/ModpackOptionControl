@@ -14,12 +14,10 @@ object McInstanceRefMocFileSystem : MocFileSystem(
             .sortedDescending()
             .filter { it != getRootPath().toFile() }
             .forEach { it.delete() }
+        reload()
 
         for (patchName in PatchList.getAll()) {
-            val patch = Patch.load(patchName)
-            MocFileSystem(getRootPath(), MocSettings.ignoredPaths).applyPatch(patch, forceDelete = true)
+            applyPatch(Patch.load(patchName), forceDelete = true)
         }
-
-        reload()
     }
 }

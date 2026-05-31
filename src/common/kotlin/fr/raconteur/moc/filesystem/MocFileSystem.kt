@@ -29,11 +29,15 @@ open class MocFileSystem(
 ) {
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val json5 = Json5()
-    private val metadataJsonFile: Path = rootPath.resolve(".mocmetadata.json")
+    private val metadataJsonFile: Path     = rootPath.resolve(".mocmetadata.json")
+    private val appliedPatchesFile: Path   = rootPath.resolve(".mocappliedpatches.json")
     private val allMetadata: MutableMap<String, MutableMap<String, String>> = loadAllMetadata()
 
     private val _files: MutableMap<Path, MocFile> = mutableMapOf()
     val files: Collection<MocFile> get() = _files.values
+
+    private val _appliedPatches: MutableList<String> = loadAppliedPatches()
+    val appliedPatches: List<String> get() = _appliedPatches.toList()
 
     init { scan() }
 
@@ -67,6 +71,8 @@ open class MocFileSystem(
 
     fun reload() {
         _files.clear()
+        _appliedPatches.clear()
+        _appliedPatches.addAll(loadAppliedPatches())
         scan()
     }
 
@@ -110,6 +116,9 @@ open class MocFileSystem(
             for ((fp, meta) in patch.metadata) allMetadata[fp] = meta.toMutableMap()
             saveAllMetadata()
         }
+
+        _appliedPatches.add(patch.name)
+        saveAppliedPatches()
     }
 
     private fun shouldApply(entry: PatchEntry, forceDelete: Boolean): Boolean =
@@ -184,6 +193,7 @@ open class MocFileSystem(
             .filter { file ->
                 file.isRegularFile()
                     && file != metadataJsonFile
+                    && file != appliedPatchesFile
                     && ignoredPaths.none { file.startsWith(rootPath.resolve(it)) }
                     && !MocFile.isBinary(file)
             }
@@ -204,6 +214,21 @@ open class MocFileSystem(
     private fun saveAllMetadata() {
         metadataJsonFile.parent?.toFile()?.mkdirs()
         metadataJsonFile.toFile().writeText(gson.toJson(allMetadata))
+    }
+
+    private fun loadAppliedPatches(): MutableList<String> {
+        if (!appliedPatchesFile.toFile().exists()) return mutableListOf()
+        return try {
+            val type = object : TypeToken<MutableList<String>>() {}.type
+            gson.fromJson(appliedPatchesFile.toFile().readText(), type) ?: mutableListOf()
+        } catch (_: Exception) {
+            mutableListOf()
+        }
+    }
+
+    private fun saveAppliedPatches() {
+        appliedPatchesFile.parent?.toFile()?.mkdirs()
+        appliedPatchesFile.toFile().writeText(gson.toJson(_appliedPatches))
     }
 
     fun diffFrom(other: MocFileSystem): FileSystemDiff {

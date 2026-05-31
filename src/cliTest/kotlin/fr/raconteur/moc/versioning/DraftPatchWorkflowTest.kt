@@ -123,6 +123,9 @@ class DraftPatchWorkflowTest {
 
         DraftPatch.finalize("update-patch")
 
+        assertEquals(listOf("update-patch"), McInstanceRefMocFileSystem.appliedPatches,
+            "dev-ref must record the applied patch name")
+
         // dev-ref: x must be 42
         McInstanceRefMocFileSystem.reload()
         val flat = McInstanceRefMocFileSystem.files
@@ -158,6 +161,9 @@ class DraftPatchWorkflowTest {
         )
         DraftPatch.finalize("deletion-modes-patch")
 
+        assertEquals(listOf("deletion-modes-patch"), McInstanceRefMocFileSystem.appliedPatches,
+            "dev-ref must record the applied patch name")
+
         // Both files are gone from dev-ref (forceDelete=true in finalize)
         McInstanceRefMocFileSystem.reload()
         assertFalse(McInstanceRefMocFileSystem.files.any { it.getFileName() == "default-gone.json" })
@@ -169,7 +175,11 @@ class DraftPatchWorkflowTest {
             targetDir.resolve("default-gone.json").toFile().writeText("""{"a": 1}""")
             targetDir.resolve("override-gone.json").toFile().writeText("""{"b": 1}""")
 
-            MocFileSystem(targetDir).applyPatch(Patch.load("deletion-modes-patch"), forceDelete = false)
+            val targetFs = MocFileSystem(targetDir)
+            targetFs.applyPatch(Patch.load("deletion-modes-patch"), forceDelete = false)
+
+            assertEquals(listOf("deletion-modes-patch"), targetFs.appliedPatches,
+                "target filesystem must record the applied patch name")
 
             assertTrue(
                 targetDir.resolve("default-gone.json").toFile().exists(),
