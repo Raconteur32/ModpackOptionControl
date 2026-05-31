@@ -1,7 +1,7 @@
 package fr.raconteur.moc.content
 
 object ContentTypeRegistry {
-    private val registry: MutableList<ContentType> = mutableListOf(JsonContentType)
+    private val registry: MutableList<ContentType> = mutableListOf(JsonContentType, PropertiesContentType)
 
     fun register(contentType: ContentType) {
         registry.add(contentType)

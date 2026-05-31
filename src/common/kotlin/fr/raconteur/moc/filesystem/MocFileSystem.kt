@@ -11,13 +11,11 @@ import com.jayway.jsonpath.JsonPath
 import com.jayway.jsonpath.PathNotFoundException
 import com.jayway.jsonpath.spi.json.GsonJsonProvider
 import com.jayway.jsonpath.spi.mapper.GsonMappingProvider
-import fr.raconteur.moc.content.ContentTypeRegistry
 import fr.raconteur.moc.content.TextContentType
 import fr.raconteur.moc.versioning.EntryKind
 import fr.raconteur.moc.versioning.Patch
 import fr.raconteur.moc.versioning.PatchEntry
 import fr.raconteur.moc.versioning.PatchMode
-import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.io.path.isDirectory
@@ -94,9 +92,8 @@ open class MocFileSystem(
                 val meta = patch.metadata[filePath] ?: emptyMap()
                 MocFile.ensureWritable(
                     this, Path.of(filePath),
-                    encoding         = meta["encoding"] ?: StandardCharsets.UTF_8.name(),
-                    contentType      = meta["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType,
-                    initialMetadata  = meta
+                    contentTypeId = meta["content"] ?: TextContentType.id,
+                    metadata      = meta
                 )
             }
 
@@ -236,12 +233,12 @@ open class MocFileSystem(
 
         for (path in other._files.keys - _files.keys) {
             val otherFile = other._files[path]!!
-            val ghostCurrent = MocFile.ghost(this, path, otherFile.encoding, otherFile.contentType)
+            val ghostCurrent = MocFile.ghost(this, path, otherFile.contentType.id, otherFile.metadata)
             result.addDeleted(path, ghostCurrent.diffFrom(otherFile))
         }
         for (path in _files.keys - other._files.keys) {
             val current = _files[path]!!
-            val ghostRef = MocFile.ghost(other, path, current.encoding, current.contentType)
+            val ghostRef = MocFile.ghost(other, path, current.contentType.id, current.metadata)
             result.addNew(path, current.diffFrom(ghostRef))
         }
         for (path in _files.keys intersect other._files.keys) {

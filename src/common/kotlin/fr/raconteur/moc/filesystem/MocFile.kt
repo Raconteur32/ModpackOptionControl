@@ -20,41 +20,30 @@ import java.nio.file.Path
 class MocFile private constructor(
     val fileSystem: MocFileSystem,
     val relativePath: Path,
-    val encoding: String,
-    val contentType: ContentType,
     val exists: Boolean,
-    initialMetadata: Map<String, String> = emptyMap()
+    val metadata: MutableMap<String, String>
 ) {
-    val metadata: MutableMap<String, String> = mutableMapOf<String, String>().also {
-        it.putAll(initialMetadata)
-        it["encoding"] = encoding
-        it["content"] = contentType.id
-    }
+    val encoding: String
+        get() = metadata["encoding"] ?: StandardCharsets.UTF_8.name()
+    val contentType: ContentType
+        get() = metadata["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
 
     fun initContentTypeSpecificMetadata() {
         metadata.putAll(contentType.getSpecificMetadata(this))
-        fileSystem.registerMetadata(this)
     }
+
     companion object {
         fun load(fileSystem: MocFileSystem, relativePath: Path): MocFile {
             val absPath = fileSystem.getRootPath().resolve(relativePath)
             if (!absPath.toFile().exists()) throw RuntimeException("File does not exist: $absPath")
-
-            val savedMeta = fileSystem.getFileMetadata(relativePath)
-            val encoding: String
-            val contentType: ContentType
-
-            if (savedMeta != null) {
-                encoding    = savedMeta["encoding"] ?: StandardCharsets.UTF_8.name()
-                contentType = savedMeta["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
-            } else {
-                encoding = detectEncoding(absPath)
-                val probe = MocFile(fileSystem, relativePath, encoding, TextContentType, exists = true)
-                contentType = inferContentType(probe)
+            val meta = fileSystem.getFileMetadata(relativePath)?.toMutableMap() ?: mutableMapOf()
+            if (!meta.containsKey("encoding")) meta["encoding"] = detectEncoding(absPath)
+            if (!meta.containsKey("content")) {
+                val probe = MocFile(fileSystem, relativePath, exists = true, metadata = meta.toMutableMap())
+                meta["content"] = inferContentType(probe).id
             }
-
-            val file = MocFile(fileSystem, relativePath, encoding, contentType, exists = true,
-                initialMetadata = savedMeta ?: emptyMap())
+            val file = MocFile(fileSystem, relativePath, exists = true, metadata = meta)
+            file.initContentTypeSpecificMetadata()
             fileSystem.register(file)
             return file
         }
@@ -62,12 +51,13 @@ class MocFile private constructor(
         fun ensureWritable(
             fileSystem: MocFileSystem,
             relativePath: Path,
-            encoding: String,
-            contentType: ContentType,
-            initialMetadata: Map<String, String> = emptyMap()
+            contentTypeId: String,
+            metadata: Map<String, String> = emptyMap()
         ): MocFile {
+            val meta = metadata.toMutableMap().also { it["content"] = contentTypeId }
             val exists = fileSystem.getRootPath().resolve(relativePath).toFile().exists()
-            val file = MocFile(fileSystem, relativePath, encoding, contentType, exists, initialMetadata)
+            val file = MocFile(fileSystem, relativePath, exists, meta)
+            file.initContentTypeSpecificMetadata()
             fileSystem.register(file)
             return file
         }
@@ -75,11 +65,14 @@ class MocFile private constructor(
         fun ghost(
             fileSystem: MocFileSystem,
             relativePath: Path,
-            encoding: String,
-            contentType: ContentType
+            contentTypeId: String,
+            metadata: Map<String, String> = emptyMap()
         ): MocFile {
+            val meta = metadata.toMutableMap().also { it["content"] = contentTypeId }
             val exists = fileSystem.getRootPath().resolve(relativePath).toFile().exists()
-            return MocFile(fileSystem, relativePath, encoding, contentType, exists)
+            val file = MocFile(fileSystem, relativePath, exists, meta)
+            file.initContentTypeSpecificMetadata()
+            return file
         }
 
         fun isBinary(path: Path): Boolean {
