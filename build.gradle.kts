@@ -65,12 +65,14 @@ dependencies {
 	"commonImplementation"("com.google.code.gson:gson:2.11.0")
 	"commonImplementation"("de.marhali:json5-java:3.0.0")
 	"commonImplementation"("com.fasterxml.jackson.dataformat:jackson-dataformat-properties:2.18.3")
+	"commonImplementation"("com.fasterxml.jackson.dataformat:jackson-dataformat-toml:2.18.3")
 
 	// Embedded in the mod JAR via Jar-in-Jar
 	include("com.ibm.icu:icu4j:76.1")
 	include("com.jayway.jsonpath:json-path:2.9.0")
 	include("de.marhali:json5-java:3.0.0")
 	include("com.fasterxml.jackson.dataformat:jackson-dataformat-properties:2.18.3")
+	include("com.fasterxml.jackson.dataformat:jackson-dataformat-toml:2.18.3")
 
 	// CLI deps
 	"cliImplementation"("com.github.ajalt.clikt:clikt:5.0.3")
