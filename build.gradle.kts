@@ -4,6 +4,8 @@ plugins {
 	id("net.fabricmc.fabric-loom")
 	`maven-publish`
 	id("org.jetbrains.kotlin.jvm") version "2.3.21"
+	id("org.jetbrains.compose")
+	id("org.jetbrains.kotlin.plugin.compose")
 }
 
 version = providers.gradleProperty("mod_version").get()
@@ -12,6 +14,8 @@ group = providers.gradleProperty("maven_group").get()
 repositories {
 	mavenCentral()
 	maven("https://us-central1-maven.pkg.dev/varabyte-repos/public")
+	maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
+	google()
 }
 
 sourceSets {
@@ -21,6 +25,10 @@ sourceSets {
 		runtimeClasspath += common.output
 	}
 	val cli by creating {
+		compileClasspath += common.output
+		runtimeClasspath += common.output
+	}
+	val gui by creating {
 		compileClasspath += common.output
 		runtimeClasspath += common.output
 	}
@@ -39,6 +47,9 @@ configurations {
 		extendsFrom(configurations["commonImplementation"])
 	}
 	named("cliImplementation") {
+		extendsFrom(configurations["commonImplementation"])
+	}
+	named("guiImplementation") {
 		extendsFrom(configurations["commonImplementation"])
 	}
 	named("commonTestImplementation") {
@@ -78,11 +89,30 @@ dependencies {
 	"cliImplementation"("com.github.ajalt.clikt:clikt:5.0.3")
 	"cliImplementation"("com.varabyte.kotter:kotter-jvm:1.1.2")
 
+	// GUI deps
+	"guiImplementation"(compose.desktop.currentOs)
+
+	// Compose runtime needed on classpath for all compilations (compose compiler plugin requirement)
+	// compileOnly keeps it out of the mod JAR and CLI runtime
+	val composeRuntime = "org.jetbrains.compose.runtime:runtime-desktop:1.11.0"
+	"commonCompileOnly"(composeRuntime)
+	"commonTestCompileOnly"(composeRuntime)
+	"cliCompileOnly"(composeRuntime)
+	"cliTestCompileOnly"(composeRuntime)
+	compileOnly(composeRuntime)
+
 	// Test deps (no Minecraft runtime needed)
 	"commonTestImplementation"("org.junit.jupiter:junit-jupiter:5.11.4")
 	"commonTestRuntimeOnly"("org.junit.platform:junit-platform-launcher")
 	"cliTestImplementation"("org.junit.jupiter:junit-jupiter:5.11.4")
 	"cliTestRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.register<JavaExec>("runGui") {
+	group = "application"
+	classpath = sourceSets["gui"].runtimeClasspath
+	mainClass.set("fr.raconteur.moc.gui.MainKt")
+	jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
 tasks.register<JavaExec>("runCli") {
@@ -156,6 +186,12 @@ tasks.jar {
 
 	from("LICENSE") {
 		rename { "${it}_$projectName" }
+	}
+}
+
+compose.desktop {
+	application {
+		mainClass = "fr.raconteur.moc.gui.MainKt"
 	}
 }
 

@@ -21,11 +21,14 @@ import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.FileDiffKind
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
+import fr.raconteur.moc.filesystem.applyDiffToDraft
+import fr.raconteur.moc.filesystem.directChildren
+import fr.raconteur.moc.filesystem.isDescendant
+import fr.raconteur.moc.filesystem.openIdeDiff
 import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchEntry
 import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.PatchMode
-import java.nio.file.Files
 import java.nio.file.Path
 
 private sealed class BrowseMode {
@@ -47,51 +50,11 @@ private fun openFileIdeDiff(filePath: Path, kind: FileDiffKind) {
     openIdeDiff(oldContent, newContent, ext)
 }
 
-private fun openIdeDiff(oldValue: Any?, newValue: Any?, extension: String) {
-    val suffix = if (extension.startsWith('.')) extension else ".$extension"
-    val oldFile = Files.createTempFile("moc-old-", suffix).also { it.toFile().writeText(oldValue?.toString() ?: "") }
-    val newFile = Files.createTempFile("moc-new-", suffix).also { it.toFile().writeText(newValue?.toString() ?: "") }
-    val command = when {
-        System.getenv("TERMINAL_EMULATOR")?.contains("JetBrains", ignoreCase = true) == true ->
-            listOf("idea", "diff", oldFile.toString(), newFile.toString())
-        System.getenv("TERM_PROGRAM")?.equals("vscode", ignoreCase = true) == true ->
-            listOf("code", "--diff", oldFile.toString(), newFile.toString())
-        else ->
-            listOf("idea", "diff", oldFile.toString(), newFile.toString())
-    }
-    ProcessBuilder(command).inheritIO().start()
-}
-
-private fun directChildren(allPaths: List<String>, parent: String): List<String> =
-    allPaths.filter { path ->
-        if (path == parent || !path.startsWith(parent)) return@filter false
-        val suffix = path.removePrefix(parent)
-        when {
-            suffix.startsWith('.') -> suffix.drop(1).let { !it.contains('.') && !it.contains('[') }
-            suffix.startsWith('[') -> suffix.indexOf(']').let { it != -1 && suffix.drop(it + 1).isEmpty() }
-            else -> false
-        }
-    }
-
-private fun isDescendant(childPath: String, parentPath: String): Boolean {
-    if (childPath.length <= parentPath.length) return false
-    if (!childPath.startsWith(parentPath)) return false
-    val c = childPath[parentPath.length]
-    return c == '.' || c == '['
-}
-
 private fun draftTag(entry: PatchEntry?, hasSub: Boolean): String = when {
     entry?.mode == PatchMode.OVERRIDE -> " [✓ O]"
     entry?.mode == PatchMode.DEFAULT  -> " [✓ D]"
     hasSub                            -> " […]"
     else                              -> ""
-}
-
-private fun applyDiffToDraft(optDiff: OptionDiff?, mode: PatchMode) = when (optDiff) {
-    is OptionDiff.New     -> DraftPatch.setValueEntry(optDiff, mode)
-    is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, mode)
-    is OptionDiff.Deleted -> DraftPatch.setDeletionEntry(optDiff, mode)
-    null                  -> Unit
 }
 
 fun runDiffBrowser() {
