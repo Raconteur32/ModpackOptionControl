@@ -1,6 +1,7 @@
 package fr.raconteur.moc.cli
 
 import com.varabyte.kotter.foundation.input.CharKey
+import com.varabyte.kotter.foundation.input.Key
 import com.varabyte.kotter.foundation.input.Keys
 import com.varabyte.kotter.foundation.input.input
 import com.varabyte.kotter.foundation.input.onInputChanged
@@ -27,7 +28,13 @@ import fr.raconteur.moc.versioning.PatchMode
 import java.nio.file.Files
 import java.nio.file.Path
 
-private enum class BrowseMode { FILES, DIFF, VALUE, FINALIZE }
+// VALUE porte sa propre destination de retour — plus besoin de previousMode
+private sealed class BrowseMode {
+    object Files    : BrowseMode()
+    object Diff     : BrowseMode()
+    data class Value(val returnTo: BrowseMode) : BrowseMode()
+    object Finalize : BrowseMode()
+}
 
 private fun openFileIdeDiff(filePath: Path, kind: FileDiffKind) {
     val ext = filePath.toString().substringAfterLast('.', "txt")
@@ -80,10 +87,17 @@ private fun draftTag(entry: PatchEntry?, hasSub: Boolean): String = when {
     else                              -> ""
 }
 
+// Remplace les 6 blocs when(optDiff) identiques disséminés dans les handlers d/o
+private fun applyDiffToDraft(optDiff: OptionDiff?, mode: PatchMode) = when (optDiff) {
+    is OptionDiff.New     -> DraftPatch.setValueEntry(optDiff, mode)
+    is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, mode)
+    is OptionDiff.Deleted -> DraftPatch.setDeletionEntry(optDiff, mode)
+    null                  -> Unit
+}
+
 fun runDiffBrowser() {
     session {
-        var mode           by liveVarOf(BrowseMode.FILES)
-        var previousMode   by liveVarOf(BrowseMode.FILES)
+        var mode           by liveVarOf<BrowseMode>(BrowseMode.Files)
         var fileIndex      by liveVarOf(0)
         var diffIndex      by liveVarOf(0)
         var pathStack      by liveVarOf(listOf("$"))
@@ -95,7 +109,6 @@ fun runDiffBrowser() {
         var confirmAction  by liveVarOf<(() -> Unit)?>(null)
         var entries        by liveVarOf(McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem).entries.sortedBy { it.key.toString() })
 
-        // Entry directe sur le fichier entier (optionPath "$" ou "" pour les fichiers supprimés)
         fun draftFileEntry(filePath: Path): PatchEntry? =
             draftEntries.firstOrNull { it.filePath == filePath.toString() && (it.optionPath == "$" || it.optionPath == "") }
 
@@ -105,10 +118,6 @@ fun runDiffBrowser() {
         fun hasSubDraft(filePath: Path, parentPath: String): Boolean =
             draftEntries.any { it.filePath == filePath.toString() && isDescendant(it.optionPath, parentPath) }
 
-        // Applique doApply en vérifiant les conflits hiérarchiques.
-        // - Si un parent a une entry : avertit que la parente sera retirée.
-        // - Si des enfants ont des entries : avertit qu'elles seront retirées.
-        // Dans les deux cas, demande confirmation avant d'agir.
         fun applyOptionEntry(filePath: Path, optionPath: String, doApply: () -> Unit) {
             val parentEntry = draftEntries.firstOrNull {
                 it.filePath == filePath.toString() && isDescendant(optionPath, it.optionPath)
@@ -138,119 +147,255 @@ fun runDiffBrowser() {
             draftEntries = DraftPatch.entries.toList()
         }
 
-        section {
-            when (mode) {
-                BrowseMode.FILES -> {
-                    val draftCount = draftEntries.size
-                    textLine("Diff — ${entries.size} fichier(s) modifié(s)   Draft: $draftCount")
-                    textLine()
-                    entries.forEachIndexed { i, (path, fileDiff) ->
-                        val cursor = if (i == fileIndex) "> " else "  "
-                        val arrow  = if (fileDiff.flatContentDiff.isNotEmpty()) " ▶" else ""
-                        val tag    = draftTag(draftFileEntry(path), hasSubDraft(path, "$"))
-                        when (fileDiff.kind) {
-                            FileDiffKind.NEW     -> green  { text(cursor); bold { text("+ $path$arrow") }; blue { textLine(tag) } }
-                            FileDiffKind.DELETED -> red    { text(cursor); bold { text("- $path$arrow") }; blue { textLine(tag) } }
-                            FileDiffKind.CHANGED -> yellow { text(cursor); bold { text("~ $path$arrow") }; blue { textLine(tag) } }
-                        }
-                    }
-                    textLine()
-                    green { text("+ nouveau") }; text("   "); red { text("- supprimé") }; text("   "); yellow { textLine("~ modifié") }
-                    val finalizeHint = if (draftCount > 0) "f finaliser   " else ""
-                    textLine("↑↓ naviguer   ↵ ouvrir   i diff IDE   d défaut   o override   r retirer   ${finalizeHint}q quitter")
-                }
+        // ── Gestionnaires de touches ────────────────────────────────────────────
 
-                BrowseMode.DIFF -> {
+        fun handleFilesKey(k: Key) {
+            when (k) {
+                Keys.UP      -> if (fileIndex > 0) fileIndex--
+                Keys.DOWN    -> if (fileIndex < entries.size - 1) fileIndex++
+                CharKey('i') -> openFileIdeDiff(entries[fileIndex].key, entries[fileIndex].value.kind)
+                CharKey('f') -> if (draftEntries.isNotEmpty()) mode = BrowseMode.Finalize
+                CharKey('d') -> {
                     val (filePath, fileDiff) = entries[fileIndex]
-                    val allPaths     = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
-                    val currentParent = pathStack.last()
-                    val visible      = directChildren(allPaths, currentParent)
-
-                    when (fileDiff.kind) {
-                        FileDiffKind.NEW     -> green  { bold { textLine("+ $filePath") } }
-                        FileDiffKind.DELETED -> red    { bold { textLine("- $filePath") } }
-                        FileDiffKind.CHANGED -> yellow { bold { textLine("~ $filePath") } }
-                    }
-                    textLine("  ${pathStack.joinToString(" › ")}")
-                    textLine()
-
-                    if (visible.isEmpty()) {
-                        textLine("  (aucun sous-élément)")
-                    } else {
-                        visible.forEachIndexed { i, path ->
-                            val cursor      = if (i == diffIndex) "> " else "  "
-                            val entry       = fileDiff.flatContentDiff[path]
-                            val hasChildren = directChildren(allPaths, path).isNotEmpty()
-                            val arrow       = if (hasChildren) " ▶" else ""
-                            val tag         = draftTag(draftForOption(filePath, path), hasSubDraft(filePath, path))
-                            when (entry) {
-                                is OptionDiff.New     -> green  { text("$cursor+ $path$arrow"); blue { textLine(tag) } }
-                                is OptionDiff.Deleted -> red    { text("$cursor- $path$arrow"); blue { textLine(tag) } }
-                                is OptionDiff.Changed -> yellow { text("$cursor~ $path$arrow"); blue { textLine(tag) } }
-                                null                  -> textLine("$cursor? $path$arrow")
-                            }
+                    if (draftFileEntry(filePath) == null) {
+                        val optDiff = if (fileDiff.kind == FileDiffKind.DELETED)
+                            fileDiff.flatContentDiff[""] else fileDiff.flatContentDiff["$"]
+                        if (optDiff != null) applyOptionEntry(filePath, optDiff.path) {
+                            applyDiffToDraft(optDiff, PatchMode.DEFAULT)
                         }
                     }
-
-                    textLine()
-                    green { text("+ nouveau") }; text("   "); red { text("- supprimé") }; text("   "); yellow { textLine("~ modifié") }
-                    val escHint = if (pathStack.size > 1) "esc remonter" else "esc retour"
-                    textLine("↑↓ naviguer   ↵ entrer   i diff IDE   d défaut   o override   r retirer   $escHint   q quitter")
                 }
-
-                BrowseMode.VALUE -> {
+                CharKey('o') -> {
                     val (filePath, fileDiff) = entries[fileIndex]
-                    val optDiff = valuePath?.let { fileDiff.flatContentDiff[it] }
-                    val inDraft = valuePath?.let { draftForOption(filePath, it) }
-                    fun preview(v: Any?) = v?.toString()?.replace("\n", "↵")?.take(120)?.let {
-                        if (v.toString().length > 120) "$it…" else it
-                    } ?: "null"
-
-                    bold { text(valuePath ?: "") }
-                    if (inDraft != null) blue { textLine("  [✓ ${inDraft.mode}]") } else textLine()
-                    textLine()
-
-                    when (optDiff) {
-                        is OptionDiff.New -> {
-                            green { textLine("+ Nouveau") }
-                            textLine()
-                            textLine("  Valeur : ${preview(optDiff.newValue)}")
+                    if (draftFileEntry(filePath) == null) {
+                        val optDiff = if (fileDiff.kind == FileDiffKind.DELETED)
+                            fileDiff.flatContentDiff[""] else fileDiff.flatContentDiff["$"]
+                        if (optDiff != null) applyOptionEntry(filePath, optDiff.path) {
+                            applyDiffToDraft(optDiff, PatchMode.OVERRIDE)
                         }
-                        is OptionDiff.Deleted -> {
-                            red { textLine("- Supprimé") }
-                            textLine()
-                            textLine("  Ancienne valeur : ${preview(optDiff.oldValue)}")
-                        }
-                        is OptionDiff.Changed -> {
-                            red   { textLine("  Avant : ${preview(optDiff.oldValue)}") }
-                            green { textLine("  Après : ${preview(optDiff.newValue)}") }
-                        }
-                        null -> textLine("  (valeur inconnue)")
                     }
-
-                    textLine()
-                    val ideHint = if (optDiff is OptionDiff.Changed) "i diff IDE   " else ""
-                    if (inDraft != null)
-                        textLine("${ideHint}r retirer   esc retour   q quitter")
-                    else
-                        textLine("${ideHint}d défaut   o override   esc retour   q quitter")
                 }
-
-                BrowseMode.FINALIZE -> {
-                    textLine("Finaliser le patch (${draftEntries.size} entrée(s))")
-                    textLine()
-                    text("Nom : "); input()
-                    textLine()
-                    if (patchNameError != null) {
-                        red { textLine(patchNameError!!) }
-                    } else {
-                        textLine()
+                CharKey('r') -> {
+                    val (filePath, _) = entries[fileIndex]
+                    val fileEntry = draftFileEntry(filePath)
+                    if (fileEntry != null) {
+                        DraftPatch.removeEntry(filePath.toString(), fileEntry.optionPath)
+                        draftEntries = DraftPatch.entries.toList()
                     }
-                    val confirmHint = if (patchNameError == null && patchName.isNotBlank()) "↵ confirmer   " else ""
-                    textLine("${confirmHint}esc annuler")
+                }
+                Keys.ENTER -> {
+                    val fileDiff = entries[fileIndex].value
+                    val allPaths = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
+                    if (directChildren(allPaths, "$").isNotEmpty()) {
+                        pathStack = listOf("$")
+                        diffIndex = 0
+                        mode = BrowseMode.Diff
+                    } else {
+                        valuePath = "$"
+                        mode = BrowseMode.Value(returnTo = BrowseMode.Files)
+                    }
                 }
             }
+        }
 
+        fun handleDiffKey(k: Key) {
+            val allPaths = entries[fileIndex].value.flatContentDiff.keys.filter { it != "$" }.toList()
+            val visible  = directChildren(allPaths, pathStack.last())
+            when (k) {
+                CharKey('i') -> openFileIdeDiff(entries[fileIndex].key, entries[fileIndex].value.kind)
+                Keys.UP      -> if (diffIndex > 0) diffIndex--
+                Keys.DOWN    -> if (diffIndex < visible.size - 1) diffIndex++
+                Keys.ENTER   -> {
+                    if (visible.isNotEmpty()) {
+                        val selected = visible[diffIndex]
+                        if (directChildren(allPaths, selected).isNotEmpty()) {
+                            pathStack = pathStack + selected
+                            diffIndex = 0
+                        } else {
+                            valuePath = selected
+                            mode = BrowseMode.Value(returnTo = BrowseMode.Diff)
+                        }
+                    }
+                }
+                CharKey('d') -> if (visible.isNotEmpty()) {
+                    val (filePath, fileDiff) = entries[fileIndex]
+                    val selected = visible[diffIndex]
+                    val optDiff  = fileDiff.flatContentDiff[selected]
+                    if (draftForOption(filePath, selected) == null && optDiff != null)
+                        applyOptionEntry(filePath, selected) { applyDiffToDraft(optDiff, PatchMode.DEFAULT) }
+                }
+                CharKey('o') -> if (visible.isNotEmpty()) {
+                    val (filePath, fileDiff) = entries[fileIndex]
+                    val selected = visible[diffIndex]
+                    val optDiff  = fileDiff.flatContentDiff[selected]
+                    if (draftForOption(filePath, selected) == null && optDiff != null)
+                        applyOptionEntry(filePath, selected) { applyDiffToDraft(optDiff, PatchMode.OVERRIDE) }
+                }
+                CharKey('r') -> if (visible.isNotEmpty()) {
+                    val (filePath, _) = entries[fileIndex]
+                    val selected = visible[diffIndex]
+                    if (draftForOption(filePath, selected) != null) {
+                        DraftPatch.removeEntry(filePath.toString(), selected)
+                        draftEntries = DraftPatch.entries.toList()
+                    }
+                }
+                Keys.ESC -> {
+                    if (pathStack.size > 1) {
+                        pathStack = pathStack.dropLast(1)
+                        diffIndex = 0
+                    } else {
+                        mode = BrowseMode.Files
+                    }
+                }
+            }
+        }
+
+        fun handleValueKey(k: Key, returnTo: BrowseMode) {
+            val (filePath, fileDiff) = entries[fileIndex]
+            val optDiff = valuePath?.let { fileDiff.flatContentDiff[it] }
+            val vp      = valuePath ?: return
+            val inDraft = draftForOption(filePath, vp)
+            when (k) {
+                Keys.ESC     -> mode = returnTo
+                CharKey('i') -> if (optDiff is OptionDiff.Changed) {
+                    val ext = filePath.toString().substringAfterLast('.', "txt")
+                    openIdeDiff(optDiff.oldValue, optDiff.newValue, ext)
+                }
+                CharKey('r') -> if (inDraft != null) {
+                    DraftPatch.removeEntry(filePath.toString(), vp)
+                    draftEntries = DraftPatch.entries.toList()
+                }
+                CharKey('d') -> if (inDraft == null && optDiff != null)
+                    applyOptionEntry(filePath, vp) { applyDiffToDraft(optDiff, PatchMode.DEFAULT) }
+                CharKey('o') -> if (inDraft == null && optDiff != null)
+                    applyOptionEntry(filePath, vp) { applyDiffToDraft(optDiff, PatchMode.OVERRIDE) }
+            }
+        }
+
+        fun handleFinalizeKey(k: Key) {
+            when (k) {
+                Keys.ESC -> { patchName = ""; mode = BrowseMode.Files }
+                else     -> Unit
+            }
+        }
+
+        // ── Rendu ──────────────────────────────────────────────────────────────
+
+        section {
+            fun renderLegend() {
+                green { text("+ nouveau") }; text("   "); red { text("- supprimé") }; text("   "); yellow { textLine("~ modifié") }
+            }
+
+            fun renderFiles() {
+                val draftCount = draftEntries.size
+                textLine("Diff — ${entries.size} fichier(s) modifié(s)   Draft: $draftCount")
+                textLine()
+                entries.forEachIndexed { i, (path, fileDiff) ->
+                    val cursor = if (i == fileIndex) "> " else "  "
+                    val arrow  = if (fileDiff.flatContentDiff.isNotEmpty()) " ▶" else ""
+                    val tag    = draftTag(draftFileEntry(path), hasSubDraft(path, "$"))
+                    when (fileDiff.kind) {
+                        FileDiffKind.NEW     -> green  { text(cursor); bold { text("+ $path$arrow") }; blue { textLine(tag) } }
+                        FileDiffKind.DELETED -> red    { text(cursor); bold { text("- $path$arrow") }; blue { textLine(tag) } }
+                        FileDiffKind.CHANGED -> yellow { text(cursor); bold { text("~ $path$arrow") }; blue { textLine(tag) } }
+                    }
+                }
+                textLine()
+                renderLegend()
+                val finalizeHint = if (draftCount > 0) "f finaliser   " else ""
+                textLine("↑↓ naviguer   ↵ ouvrir   i diff IDE   d défaut   o override   r retirer   ${finalizeHint}q quitter")
+            }
+
+            fun renderDiff() {
+                val (filePath, fileDiff) = entries[fileIndex]
+                val allPaths      = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
+                val currentParent = pathStack.last()
+                val visible       = directChildren(allPaths, currentParent)
+                when (fileDiff.kind) {
+                    FileDiffKind.NEW     -> green  { bold { textLine("+ $filePath") } }
+                    FileDiffKind.DELETED -> red    { bold { textLine("- $filePath") } }
+                    FileDiffKind.CHANGED -> yellow { bold { textLine("~ $filePath") } }
+                }
+                textLine("  ${pathStack.joinToString(" › ")}")
+                textLine()
+                if (visible.isEmpty()) {
+                    textLine("  (aucun sous-élément)")
+                } else {
+                    visible.forEachIndexed { i, path ->
+                        val cursor      = if (i == diffIndex) "> " else "  "
+                        val entry       = fileDiff.flatContentDiff[path]
+                        val hasChildren = directChildren(allPaths, path).isNotEmpty()
+                        val arrow       = if (hasChildren) " ▶" else ""
+                        val tag         = draftTag(draftForOption(filePath, path), hasSubDraft(filePath, path))
+                        when (entry) {
+                            is OptionDiff.New     -> green  { text("$cursor+ $path$arrow"); blue { textLine(tag) } }
+                            is OptionDiff.Deleted -> red    { text("$cursor- $path$arrow"); blue { textLine(tag) } }
+                            is OptionDiff.Changed -> yellow { text("$cursor~ $path$arrow"); blue { textLine(tag) } }
+                            null                  -> textLine("$cursor? $path$arrow")
+                        }
+                    }
+                }
+                textLine()
+                renderLegend()
+                val escHint = if (pathStack.size > 1) "esc remonter" else "esc retour"
+                textLine("↑↓ naviguer   ↵ entrer   i diff IDE   d défaut   o override   r retirer   $escHint   q quitter")
+            }
+
+            fun renderValue() {
+                val (filePath, fileDiff) = entries[fileIndex]
+                val optDiff = valuePath?.let { fileDiff.flatContentDiff[it] }
+                val inDraft = valuePath?.let { draftForOption(filePath, it) }
+                fun preview(v: Any?) = v?.toString()?.replace("\n", "↵")?.take(120)?.let {
+                    if (v.toString().length > 120) "$it…" else it
+                } ?: "null"
+                bold { text(valuePath ?: "") }
+                if (inDraft != null) blue { textLine("  [✓ ${inDraft.mode}]") } else textLine()
+                textLine()
+                when (optDiff) {
+                    is OptionDiff.New -> {
+                        green { textLine("+ Nouveau") }
+                        textLine()
+                        textLine("  Valeur : ${preview(optDiff.newValue)}")
+                    }
+                    is OptionDiff.Deleted -> {
+                        red { textLine("- Supprimé") }
+                        textLine()
+                        textLine("  Ancienne valeur : ${preview(optDiff.oldValue)}")
+                    }
+                    is OptionDiff.Changed -> {
+                        red   { textLine("  Avant : ${preview(optDiff.oldValue)}") }
+                        green { textLine("  Après : ${preview(optDiff.newValue)}") }
+                    }
+                    null -> textLine("  (valeur inconnue)")
+                }
+                textLine()
+                val ideHint = if (optDiff is OptionDiff.Changed) "i diff IDE   " else ""
+                if (inDraft != null)
+                    textLine("${ideHint}r retirer   esc retour   q quitter")
+                else
+                    textLine("${ideHint}d défaut   o override   esc retour   q quitter")
+            }
+
+            fun renderFinalize() {
+                textLine("Finaliser le patch (${draftEntries.size} entrée(s))")
+                textLine()
+                text("Nom : "); input()
+                textLine()
+                if (patchNameError != null) {
+                    red { textLine(patchNameError!!) }
+                } else {
+                    textLine()
+                }
+                val confirmHint = if (patchNameError == null && patchName.isNotBlank()) "↵ confirmer   " else ""
+                textLine("${confirmHint}esc annuler")
+            }
+
+            when (val m = mode) {
+                is BrowseMode.Files    -> renderFiles()
+                is BrowseMode.Diff     -> renderDiff()
+                is BrowseMode.Value    -> renderValue()
+                is BrowseMode.Finalize -> renderFinalize()
+            }
             if (confirmMessage != null) {
                 textLine()
                 yellow { bold { textLine("⚠  ${confirmMessage}") } }
@@ -264,15 +409,15 @@ fun runDiffBrowser() {
                 else null
             }
             onInputEntered {
-                if (mode == BrowseMode.FINALIZE && patchName.isNotBlank() && patchNameError == null) {
+                if (mode is BrowseMode.Finalize && patchName.isNotBlank() && patchNameError == null) {
                     DraftPatch.finalize(patchName)
-                    entries    = McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem).entries.sortedBy { it.key.toString() }
-                    fileIndex  = 0
-                    diffIndex  = 0
-                    pathStack  = listOf("$")
+                    entries      = McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem).entries.sortedBy { it.key.toString() }
+                    fileIndex    = 0
+                    diffIndex    = 0
+                    pathStack    = listOf("$")
                     draftEntries = DraftPatch.entries.toList()
-                    patchName  = ""
-                    mode       = BrowseMode.FILES
+                    patchName    = ""
+                    mode         = BrowseMode.Files
                 }
             }
             onKeyPressed {
@@ -284,173 +429,11 @@ fun runDiffBrowser() {
                     }
                     return@onKeyPressed
                 }
-
-                when (mode) {
-                    BrowseMode.FILES -> when (key) {
-                        Keys.UP      -> if (fileIndex > 0) fileIndex--
-                        Keys.DOWN    -> if (fileIndex < entries.size - 1) fileIndex++
-                        CharKey('i') -> openFileIdeDiff(entries[fileIndex].key, entries[fileIndex].value.kind)
-                        CharKey('f') -> if (draftEntries.isNotEmpty()) mode = BrowseMode.FINALIZE
-                        CharKey('d') -> {
-                            val (filePath, fileDiff) = entries[fileIndex]
-                            if (draftFileEntry(filePath) == null) {
-                                val optDiff = if (fileDiff.kind == FileDiffKind.DELETED)
-                                    fileDiff.flatContentDiff[""] else fileDiff.flatContentDiff["$"]
-                                if (optDiff != null) applyOptionEntry(filePath, optDiff.path) {
-                                    when (optDiff) {
-                                        is OptionDiff.New     -> DraftPatch.setValueEntry(optDiff, PatchMode.DEFAULT)
-                                        is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, PatchMode.DEFAULT)
-                                        is OptionDiff.Deleted -> DraftPatch.setDeletionEntry(optDiff, PatchMode.DEFAULT)
-                                    }
-                                }
-                            }
-                        }
-                        CharKey('o') -> {
-                            val (filePath, fileDiff) = entries[fileIndex]
-                            if (draftFileEntry(filePath) == null) {
-                                val optDiff = if (fileDiff.kind == FileDiffKind.DELETED)
-                                    fileDiff.flatContentDiff[""] else fileDiff.flatContentDiff["$"]
-                                if (optDiff != null) applyOptionEntry(filePath, optDiff.path) {
-                                    when (optDiff) {
-                                        is OptionDiff.New     -> DraftPatch.setValueEntry(optDiff, PatchMode.OVERRIDE)
-                                        is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, PatchMode.OVERRIDE)
-                                        is OptionDiff.Deleted -> DraftPatch.setDeletionEntry(optDiff, PatchMode.OVERRIDE)
-                                    }
-                                }
-                            }
-                        }
-                        CharKey('r') -> {
-                            val (filePath, _) = entries[fileIndex]
-                            val fileEntry = draftFileEntry(filePath)
-                            if (fileEntry != null) {
-                                DraftPatch.removeEntry(filePath.toString(), fileEntry.optionPath)
-                                draftEntries = DraftPatch.entries.toList()
-                            }
-                        }
-                        Keys.ENTER -> {
-                            val fileDiff = entries[fileIndex].value
-                            val allPaths = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
-                            if (directChildren(allPaths, "$").isNotEmpty()) {
-                                pathStack = listOf("$")
-                                diffIndex = 0
-                                mode = BrowseMode.DIFF
-                            } else {
-                                valuePath = "$"
-                                previousMode = BrowseMode.FILES
-                                mode = BrowseMode.VALUE
-                            }
-                        }
-                    }
-
-                    BrowseMode.DIFF -> {
-                        val allPaths = entries[fileIndex].value.flatContentDiff.keys.filter { it != "$" }.toList()
-                        val visible  = directChildren(allPaths, pathStack.last())
-                        when (key) {
-                            CharKey('i') -> openFileIdeDiff(entries[fileIndex].key, entries[fileIndex].value.kind)
-                            Keys.UP      -> if (diffIndex > 0) diffIndex--
-                            Keys.DOWN    -> if (diffIndex < visible.size - 1) diffIndex++
-                            Keys.ENTER   -> {
-                                if (visible.isNotEmpty()) {
-                                    val selected = visible[diffIndex]
-                                    if (directChildren(allPaths, selected).isNotEmpty()) {
-                                        pathStack = pathStack + selected
-                                        diffIndex = 0
-                                    } else {
-                                        valuePath = selected
-                                        previousMode = BrowseMode.DIFF
-                                        mode = BrowseMode.VALUE
-                                    }
-                                }
-                            }
-                            CharKey('d') -> if (visible.isNotEmpty()) {
-                                val (filePath, fileDiff) = entries[fileIndex]
-                                val selected = visible[diffIndex]
-                                val optDiff  = fileDiff.flatContentDiff[selected]
-                                if (draftForOption(filePath, selected) == null && optDiff != null)
-                                    applyOptionEntry(filePath, selected) {
-                                        when (optDiff) {
-                                            is OptionDiff.New     -> DraftPatch.setValueEntry(optDiff, PatchMode.DEFAULT)
-                                            is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, PatchMode.DEFAULT)
-                                            is OptionDiff.Deleted -> DraftPatch.setDeletionEntry(optDiff, PatchMode.DEFAULT)
-                                        }
-                                    }
-                            }
-                            CharKey('o') -> if (visible.isNotEmpty()) {
-                                val (filePath, fileDiff) = entries[fileIndex]
-                                val selected = visible[diffIndex]
-                                val optDiff  = fileDiff.flatContentDiff[selected]
-                                if (draftForOption(filePath, selected) == null && optDiff != null)
-                                    applyOptionEntry(filePath, selected) {
-                                        when (optDiff) {
-                                            is OptionDiff.New     -> DraftPatch.setValueEntry(optDiff, PatchMode.OVERRIDE)
-                                            is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, PatchMode.OVERRIDE)
-                                            is OptionDiff.Deleted -> DraftPatch.setDeletionEntry(optDiff, PatchMode.OVERRIDE)
-                                        }
-                                    }
-                            }
-                            CharKey('r') -> if (visible.isNotEmpty()) {
-                                val (filePath, _) = entries[fileIndex]
-                                val selected = visible[diffIndex]
-                                if (draftForOption(filePath, selected) != null) {
-                                    DraftPatch.removeEntry(filePath.toString(), selected)
-                                    draftEntries = DraftPatch.entries.toList()
-                                }
-                            }
-                            Keys.ESC -> {
-                                if (pathStack.size > 1) {
-                                    pathStack = pathStack.dropLast(1)
-                                    diffIndex = 0
-                                } else {
-                                    mode = BrowseMode.FILES
-                                }
-                            }
-                        }
-                    }
-
-                    BrowseMode.VALUE -> {
-                        val (filePath, fileDiff) = entries[fileIndex]
-                        val optDiff = valuePath?.let { fileDiff.flatContentDiff[it] }
-                        val vp      = valuePath ?: return@onKeyPressed
-                        val inDraft = draftForOption(filePath, vp)
-
-                        when (key) {
-                            Keys.ESC     -> mode = previousMode
-                            CharKey('i') -> if (optDiff is OptionDiff.Changed) {
-                                val ext = filePath.toString().substringAfterLast('.', "txt")
-                                openIdeDiff(optDiff.oldValue, optDiff.newValue, ext)
-                            }
-                            CharKey('r') -> if (inDraft != null) {
-                                DraftPatch.removeEntry(filePath.toString(), vp)
-                                draftEntries = DraftPatch.entries.toList()
-                            }
-                            CharKey('d') -> if (inDraft == null && optDiff != null)
-                                applyOptionEntry(filePath, vp) {
-                                    when (optDiff) {
-                                        is OptionDiff.New     -> DraftPatch.setValueEntry(optDiff, PatchMode.DEFAULT)
-                                        is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, PatchMode.DEFAULT)
-                                        is OptionDiff.Deleted -> DraftPatch.setDeletionEntry(optDiff, PatchMode.DEFAULT)
-                                        null -> Unit
-                                    }
-                                }
-                            CharKey('o') -> if (inDraft == null && optDiff != null)
-                                applyOptionEntry(filePath, vp) {
-                                    when (optDiff) {
-                                        is OptionDiff.New     -> DraftPatch.setValueEntry(optDiff, PatchMode.OVERRIDE)
-                                        is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, PatchMode.OVERRIDE)
-                                        is OptionDiff.Deleted -> DraftPatch.setDeletionEntry(optDiff, PatchMode.OVERRIDE)
-                                        null -> Unit
-                                    }
-                                }
-                        }
-                    }
-
-                    BrowseMode.FINALIZE -> when (key) {
-                        Keys.ESC -> {
-                            patchName = ""
-                            mode = BrowseMode.FILES
-                        }
-                        else -> Unit
-                    }
+                when (val m = mode) {
+                    is BrowseMode.Files    -> handleFilesKey(key)
+                    is BrowseMode.Diff     -> handleDiffKey(key)
+                    is BrowseMode.Value    -> handleValueKey(key, m.returnTo)
+                    is BrowseMode.Finalize -> handleFinalizeKey(key)
                 }
             }
         }
