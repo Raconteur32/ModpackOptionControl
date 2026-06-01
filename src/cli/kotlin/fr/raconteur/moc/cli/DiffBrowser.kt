@@ -28,11 +28,11 @@ import fr.raconteur.moc.versioning.PatchMode
 import java.nio.file.Files
 import java.nio.file.Path
 
-// VALUE porte sa propre destination de retour — plus besoin de previousMode
 private sealed class BrowseMode {
     object Files    : BrowseMode()
     object Diff     : BrowseMode()
     data class Value(val returnTo: BrowseMode) : BrowseMode()
+    object Draft    : BrowseMode()
     object Finalize : BrowseMode()
 }
 
@@ -87,7 +87,6 @@ private fun draftTag(entry: PatchEntry?, hasSub: Boolean): String = when {
     else                              -> ""
 }
 
-// Remplace les 6 blocs when(optDiff) identiques disséminés dans les handlers d/o
 private fun applyDiffToDraft(optDiff: OptionDiff?, mode: PatchMode) = when (optDiff) {
     is OptionDiff.New     -> DraftPatch.setValueEntry(optDiff, mode)
     is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, mode)
@@ -100,6 +99,7 @@ fun runDiffBrowser() {
         var mode           by liveVarOf<BrowseMode>(BrowseMode.Files)
         var fileIndex      by liveVarOf(0)
         var diffIndex      by liveVarOf(0)
+        var draftIndex     by liveVarOf(0)
         var pathStack      by liveVarOf(listOf("$"))
         var valuePath      by liveVarOf<String?>(null)
         var draftEntries   by liveVarOf(DraftPatch.entries.toList())
@@ -123,7 +123,7 @@ fun runDiffBrowser() {
                 it.filePath == filePath.toString() && isDescendant(optionPath, it.optionPath)
             }
             if (parentEntry != null) {
-                confirmMessage = "L'entrée parente « ${parentEntry.optionPath} » [${parentEntry.mode}] sera retirée."
+                confirmMessage = "Parent entry « ${parentEntry.optionPath} » [${parentEntry.mode}] will be removed."
                 confirmAction  = {
                     DraftPatch.removeEntry(parentEntry.filePath, parentEntry.optionPath)
                     doApply()
@@ -135,7 +135,7 @@ fun runDiffBrowser() {
                 it.filePath == filePath.toString() && isDescendant(it.optionPath, optionPath)
             }
             if (children.isNotEmpty()) {
-                confirmMessage = "${children.size} sous-entrée(s) seront retirées."
+                confirmMessage = "${children.size} sub-entr${if (children.size > 1) "ies" else "y"} will be removed."
                 confirmAction  = {
                     children.forEach { DraftPatch.removeEntry(it.filePath, it.optionPath) }
                     doApply()
@@ -154,6 +154,7 @@ fun runDiffBrowser() {
                 Keys.UP      -> if (fileIndex > 0) fileIndex--
                 Keys.DOWN    -> if (fileIndex < entries.size - 1) fileIndex++
                 CharKey('i') -> openFileIdeDiff(entries[fileIndex].key, entries[fileIndex].value.kind)
+                CharKey('e') -> if (draftEntries.isNotEmpty()) { draftIndex = 0; mode = BrowseMode.Draft }
                 CharKey('f') -> if (draftEntries.isNotEmpty()) mode = BrowseMode.Finalize
                 CharKey('d') -> {
                     val (filePath, fileDiff) = entries[fileIndex]
@@ -272,6 +273,21 @@ fun runDiffBrowser() {
             }
         }
 
+        fun handleDraftKey(k: Key) {
+            when (k) {
+                Keys.UP      -> if (draftIndex > 0) draftIndex--
+                Keys.DOWN    -> if (draftIndex < draftEntries.size - 1) draftIndex++
+                CharKey('r') -> if (draftEntries.isNotEmpty()) {
+                    val entry = draftEntries[draftIndex]
+                    DraftPatch.removeEntry(entry.filePath, entry.optionPath)
+                    draftEntries = DraftPatch.entries.toList()
+                    if (draftIndex >= draftEntries.size && draftIndex > 0) draftIndex--
+                }
+                CharKey('f') -> if (draftEntries.isNotEmpty()) mode = BrowseMode.Finalize
+                Keys.ESC     -> mode = BrowseMode.Files
+            }
+        }
+
         fun handleFinalizeKey(k: Key) {
             when (k) {
                 Keys.ESC -> { patchName = ""; mode = BrowseMode.Files }
@@ -282,14 +298,40 @@ fun runDiffBrowser() {
         // ── Rendu ──────────────────────────────────────────────────────────────
 
         section {
+            fun renderBreadcrumb() {
+                when (mode) {
+                    is BrowseMode.Files -> {
+                        bold { text("FILES") }
+                        textLine("  │  ${entries.size} file(s) changed · draft: ${draftEntries.size}")
+                    }
+                    is BrowseMode.Diff -> {
+                        val (filePath, _) = entries[fileIndex]
+                        bold { text("DIFF") }
+                        textLine("  │  $filePath  ·  ${pathStack.joinToString(" › ")}")
+                    }
+                    is BrowseMode.Value -> {
+                        val (filePath, _) = entries[fileIndex]
+                        bold { text("VALUE") }
+                        textLine("  │  $filePath  ·  ${valuePath ?: ""}")
+                    }
+                    is BrowseMode.Draft -> {
+                        bold { text("DRAFT") }
+                        textLine("  │  ${draftEntries.size} pending entr${if (draftEntries.size > 1) "ies" else "y"}")
+                    }
+                    is BrowseMode.Finalize -> {
+                        bold { text("FINALIZE") }
+                        textLine("  │  ${draftEntries.size} pending entr${if (draftEntries.size > 1) "ies" else "y"}")
+                    }
+                }
+                textLine()
+            }
+
             fun renderLegend() {
-                green { text("+ nouveau") }; text("   "); red { text("- supprimé") }; text("   "); yellow { textLine("~ modifié") }
+                green { text("+ new") }; text("   "); red { text("- deleted") }; text("   "); yellow { textLine("~ changed") }
             }
 
             fun renderFiles() {
                 val draftCount = draftEntries.size
-                textLine("Diff — ${entries.size} fichier(s) modifié(s)   Draft: $draftCount")
-                textLine()
                 entries.forEachIndexed { i, (path, fileDiff) ->
                     val cursor = if (i == fileIndex) "> " else "  "
                     val arrow  = if (fileDiff.flatContentDiff.isNotEmpty()) " ▶" else ""
@@ -302,8 +344,17 @@ fun runDiffBrowser() {
                 }
                 textLine()
                 renderLegend()
-                val finalizeHint = if (draftCount > 0) "f finaliser   " else ""
-                textLine("↑↓ naviguer   ↵ ouvrir   i diff IDE   d défaut   o override   r retirer   ${finalizeHint}q quitter")
+                val actionHint = if (entries.isNotEmpty()) {
+                    val (filePath, _) = entries[fileIndex]
+                    if (draftFileEntry(filePath) != null) "r remove" else "d default   o override"
+                } else ""
+                val hints = buildList {
+                    add("↑↓ navigate"); add("↵ open"); add("i diff IDE")
+                    if (actionHint.isNotEmpty()) add(actionHint)
+                    if (draftCount > 0) { add("e entries"); add("f finalize") }
+                    add("q quit")
+                }
+                textLine(hints.joinToString("   "))
             }
 
             fun renderDiff() {
@@ -316,10 +367,9 @@ fun runDiffBrowser() {
                     FileDiffKind.DELETED -> red    { bold { textLine("- $filePath") } }
                     FileDiffKind.CHANGED -> yellow { bold { textLine("~ $filePath") } }
                 }
-                textLine("  ${pathStack.joinToString(" › ")}")
                 textLine()
                 if (visible.isEmpty()) {
-                    textLine("  (aucun sous-élément)")
+                    textLine("  (no sub-items)")
                 } else {
                     visible.forEachIndexed { i, path ->
                         val cursor      = if (i == diffIndex) "> " else "  "
@@ -337,8 +387,17 @@ fun runDiffBrowser() {
                 }
                 textLine()
                 renderLegend()
-                val escHint = if (pathStack.size > 1) "esc remonter" else "esc retour"
-                textLine("↑↓ naviguer   ↵ entrer   i diff IDE   d défaut   o override   r retirer   $escHint   q quitter")
+                val actionHint = if (visible.isNotEmpty()) {
+                    val selected = visible[diffIndex]
+                    if (draftForOption(filePath, selected) != null) "r remove" else "d default   o override"
+                } else ""
+                val escHint = if (pathStack.size > 1) "esc up" else "esc back"
+                val hints = buildList {
+                    add("↑↓ navigate"); add("↵ enter"); add("i diff IDE")
+                    if (actionHint.isNotEmpty()) add(actionHint)
+                    add(escHint); add("q quit")
+                }
+                textLine(hints.joinToString("   "))
             }
 
             fun renderValue() {
@@ -353,59 +412,80 @@ fun runDiffBrowser() {
                 textLine()
                 when (optDiff) {
                     is OptionDiff.New -> {
-                        green { textLine("+ Nouveau") }
+                        green { textLine("+ New") }
                         textLine()
-                        textLine("  Valeur : ${preview(optDiff.newValue)}")
+                        textLine("  Value: ${preview(optDiff.newValue)}")
                     }
                     is OptionDiff.Deleted -> {
-                        red { textLine("- Supprimé") }
+                        red { textLine("- Deleted") }
                         textLine()
-                        textLine("  Ancienne valeur : ${preview(optDiff.oldValue)}")
+                        textLine("  Old value: ${preview(optDiff.oldValue)}")
                     }
                     is OptionDiff.Changed -> {
-                        red   { textLine("  Avant : ${preview(optDiff.oldValue)}") }
-                        green { textLine("  Après : ${preview(optDiff.newValue)}") }
+                        red   { textLine("  Before: ${preview(optDiff.oldValue)}") }
+                        green { textLine("  After:  ${preview(optDiff.newValue)}") }
                     }
-                    null -> textLine("  (valeur inconnue)")
+                    null -> textLine("  (unknown value)")
                 }
                 textLine()
-                val ideHint = if (optDiff is OptionDiff.Changed) "i diff IDE   " else ""
-                if (inDraft != null)
-                    textLine("${ideHint}r retirer   esc retour   q quitter")
-                else
-                    textLine("${ideHint}d défaut   o override   esc retour   q quitter")
+                val hints = buildList {
+                    if (optDiff is OptionDiff.Changed) add("i diff IDE")
+                    if (inDraft != null) add("r remove") else { add("d default"); add("o override") }
+                    add("esc back"); add("q quit")
+                }
+                textLine(hints.joinToString("   "))
+            }
+
+            fun renderDraft() {
+                draftEntries.forEachIndexed { i, entry ->
+                    val cursor  = if (i == draftIndex) "> " else "  "
+                    val modeTag = if (entry.mode == PatchMode.OVERRIDE) "[✓ OVERRIDE]" else "[✓ DEFAULT] "
+                    text(cursor)
+                    text("${entry.filePath}  ·  ${entry.optionPath}")
+                    blue { textLine("  $modeTag") }
+                }
+                textLine()
+                val hints = buildList {
+                    add("↑↓ navigate"); add("r remove")
+                    if (draftEntries.isNotEmpty()) add("f finalize")
+                    add("esc back"); add("q quit")
+                }
+                textLine(hints.joinToString("   "))
             }
 
             fun renderFinalize() {
-                textLine("Finaliser le patch (${draftEntries.size} entrée(s))")
-                textLine()
-                text("Nom : "); input()
+                text("Name: "); input()
                 textLine()
                 if (patchNameError != null) {
                     red { textLine(patchNameError!!) }
                 } else {
                     textLine()
                 }
-                val confirmHint = if (patchNameError == null && patchName.isNotBlank()) "↵ confirmer   " else ""
-                textLine("${confirmHint}esc annuler")
+                val hints = buildList {
+                    if (patchNameError == null && patchName.isNotBlank()) add("↵ confirm")
+                    add("esc cancel")
+                }
+                textLine(hints.joinToString("   "))
             }
 
+            renderBreadcrumb()
             when (val m = mode) {
                 is BrowseMode.Files    -> renderFiles()
                 is BrowseMode.Diff     -> renderDiff()
                 is BrowseMode.Value    -> renderValue()
+                is BrowseMode.Draft    -> renderDraft()
                 is BrowseMode.Finalize -> renderFinalize()
             }
             if (confirmMessage != null) {
                 textLine()
                 yellow { bold { textLine("⚠  ${confirmMessage}") } }
-                textLine("↵ confirmer   esc annuler")
+                textLine("↵ confirm   esc cancel")
             }
         }.runUntilKeyPressed(Keys.Q) {
             onInputChanged {
                 patchName = input
                 patchNameError = if (input.isNotBlank() && PatchList.contains(input))
-                    "« $input » est déjà utilisé"
+                    "« $input » is already taken"
                 else null
             }
             onInputEntered {
@@ -433,6 +513,7 @@ fun runDiffBrowser() {
                     is BrowseMode.Files    -> handleFilesKey(key)
                     is BrowseMode.Diff     -> handleDiffKey(key)
                     is BrowseMode.Value    -> handleValueKey(key, m.returnTo)
+                    is BrowseMode.Draft    -> handleDraftKey(key)
                     is BrowseMode.Finalize -> handleFinalizeKey(key)
                 }
             }
