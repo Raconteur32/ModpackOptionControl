@@ -14,6 +14,7 @@ data class IgnoreEntry(
 )
 
 private data class EditorData(
+    @SerializedName("session_ignores")   val sessionIgnores: List<IgnoreEntry> = emptyList(),
     @SerializedName("value_ignores")     val valueIgnores: List<IgnoreEntry> = emptyList(),
     @SerializedName("permanent_ignores") val permanentIgnores: List<IgnoreEntry> = emptyList()
 )
@@ -38,15 +39,15 @@ object IgnoreStore {
             removeIf { it.filePath == entry.filePath && it.optionPath == entry.optionPath }
             add(entry)
         }
-        if (kind != IgnoreKind.Session) save()
+        save()
     }
 
     fun remove(filePath: String, optionPath: String, kind: IgnoreKind) {
         listFor(kind).removeIf { it.filePath == filePath && it.optionPath == optionPath }
-        if (kind != IgnoreKind.Session) save()
+        save()
     }
 
-    fun resetSession() { _sessionIgnores.clear() }
+    fun resetSession() { _sessionIgnores.clear(); save() }
 
     fun isIgnored(filePath: String, optionPath: String, newValue: Any?): Boolean {
         if (_sessionIgnores.any   { it.filePath == filePath && it.optionPath == optionPath }) return true
@@ -65,6 +66,7 @@ object IgnoreStore {
         val file = editorPath.toFile()
         if (!file.exists()) return
         val data = try { gson.fromJson(file.readText(), EditorData::class.java) } catch (_: Exception) { return }
+        data?.sessionIgnores?.forEach   { _sessionIgnores.add(it) }
         data?.valueIgnores?.forEach     { _valueIgnores.add(it) }
         data?.permanentIgnores?.forEach { _permanentIgnores.add(it) }
     }
@@ -72,6 +74,6 @@ object IgnoreStore {
     private fun save() {
         val file = editorPath.toFile()
         file.parentFile.mkdirs()
-        file.writeText(gson.toJson(EditorData(_valueIgnores.toList(), _permanentIgnores.toList())))
+        file.writeText(gson.toJson(EditorData(_sessionIgnores.toList(), _valueIgnores.toList(), _permanentIgnores.toList())))
     }
 }
