@@ -29,10 +29,10 @@ fun main() {
                     false
                 } else if (state.ignoreDialogVisible) {
                     when (event.key) {
-                        Key.One    -> { state.applyCurrentIgnore(IgnoreKind.Session);   true }
-                        Key.Two    -> { state.applyCurrentIgnore(IgnoreKind.Value);     true }
-                        Key.Three  -> { state.applyCurrentIgnore(IgnoreKind.Permanent); true }
-                        Key.Escape -> { state.ignoreDialogVisible = false;              true }
+                        Key.DirectionUp   -> { if (state.ignoreDialogSelection > 0) state.ignoreDialogSelection--; true }
+                        Key.DirectionDown -> { if (state.ignoreDialogSelection < 2) state.ignoreDialogSelection++; true }
+                        Key.Enter         -> { state.applyCurrentIgnore(IgnoreKind.entries[state.ignoreDialogSelection]); true }
+                        Key.Escape        -> { state.ignoreDialogVisible = false; true }
                         else -> false
                     }
                 } else if (state.confirmMessage != null) {

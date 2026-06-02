@@ -109,7 +109,8 @@ class AppState {
     var confirmMessage by mutableStateOf<String?>(null)
     var confirmAction  by mutableStateOf<(() -> Unit)?>(null)
     var valueRawMode   by mutableStateOf(true)
-    var ignoreDialogVisible by mutableStateOf(false)
+    var ignoreDialogVisible   by mutableStateOf(false)
+    var ignoreDialogSelection by mutableStateOf(0)
 
     fun refreshDiff() {
         entries = loadDiff()
@@ -320,6 +321,7 @@ class AppState {
 
     fun showIgnoreDialog() {
         if (ignoreDialogVisible || confirmMessage != null) return
+        ignoreDialogSelection = 0
         ignoreDialogVisible = true
     }
 

@@ -8,7 +8,12 @@ import androidx.compose.ui.unit.dp
 import fr.raconteur.moc.gui.IgnoreKind
 
 @Composable
-fun IgnoreDialog(onIgnore: (IgnoreKind) -> Unit, onDismiss: () -> Unit) {
+fun IgnoreDialog(selection: Int, onIgnore: (IgnoreKind) -> Unit, onDismiss: () -> Unit) {
+    val options = listOf(
+        IgnoreKind.Session   to "Until next patch (session)",
+        IgnoreKind.Value     to "Until value changes",
+        IgnoreKind.Permanent to "Permanently"
+    )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Ignore entry") },
@@ -16,18 +21,19 @@ fun IgnoreDialog(onIgnore: (IgnoreKind) -> Unit, onDismiss: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Ignore this entry for how long?")
                 Spacer(Modifier.height(4.dp))
-                OutlinedButton(
-                    onClick = { onIgnore(IgnoreKind.Session) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("1  Until next patch (session)") }
-                OutlinedButton(
-                    onClick = { onIgnore(IgnoreKind.Value) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("2  Until value changes") }
-                OutlinedButton(
-                    onClick = { onIgnore(IgnoreKind.Permanent) },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("3  Permanently") }
+                options.forEachIndexed { i, (kind, label) ->
+                    if (i == selection) {
+                        Button(
+                            onClick = { onIgnore(kind) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(label) }
+                    } else {
+                        OutlinedButton(
+                            onClick = { onIgnore(kind) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(label) }
+                    }
+                }
             }
         },
         buttons = {

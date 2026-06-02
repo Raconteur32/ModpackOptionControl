@@ -54,6 +54,7 @@ fun App(state: AppState) {
 
             if (state.ignoreDialogVisible) {
                 IgnoreDialog(
+                    selection = state.ignoreDialogSelection,
                     onIgnore  = { kind -> state.applyCurrentIgnore(kind) },
                     onDismiss = { state.ignoreDialogVisible = false }
                 )
