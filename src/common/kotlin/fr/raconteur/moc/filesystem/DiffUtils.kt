@@ -3,7 +3,6 @@ package fr.raconteur.moc.filesystem
 import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchMode
-import java.nio.file.Files
 
 fun directChildren(allPaths: List<String>, parent: String): List<String> =
     allPaths.filter { path ->
@@ -28,19 +27,4 @@ fun applyDiffToDraft(optDiff: OptionDiff?, mode: PatchMode) = when (optDiff) {
     is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, mode)
     is OptionDiff.Deleted -> DraftPatch.setDeletionEntry(optDiff, mode)
     null                  -> Unit
-}
-
-fun openIdeDiff(oldValue: Any?, newValue: Any?, extension: String) {
-    val suffix = if (extension.startsWith('.')) extension else ".$extension"
-    val oldFile = Files.createTempFile("moc-old-", suffix).also { it.toFile().writeText(oldValue?.toString() ?: "") }
-    val newFile = Files.createTempFile("moc-new-", suffix).also { it.toFile().writeText(newValue?.toString() ?: "") }
-    val command = when {
-        System.getenv("TERMINAL_EMULATOR")?.contains("JetBrains", ignoreCase = true) == true ->
-            listOf("idea", "diff", oldFile.toString(), newFile.toString())
-        System.getenv("TERM_PROGRAM")?.equals("vscode", ignoreCase = true) == true ->
-            listOf("code", "--diff", oldFile.toString(), newFile.toString())
-        else ->
-            listOf("idea", "diff", oldFile.toString(), newFile.toString())
-    }
-    ProcessBuilder(command).inheritIO().start()
 }

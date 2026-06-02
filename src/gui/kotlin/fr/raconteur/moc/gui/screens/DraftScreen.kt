@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -23,9 +25,11 @@ import fr.raconteur.moc.versioning.PatchMode
 @Composable
 fun DraftScreen(state: AppState) {
     val draftEntries = state.draftEntries
+    val listState    = rememberLazyListState()
+
+    LaunchedEffect(state.draftIndex) { listState.scrollToItem(state.draftIndex) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Breadcrumb
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("DRAFT", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(Modifier.width(12.dp))
@@ -38,9 +42,9 @@ fun DraftScreen(state: AppState) {
             Text("No pending entries.", color = Color.Gray, modifier = Modifier.padding(8.dp))
             Spacer(Modifier.weight(1f))
         } else {
-            LazyColumn(modifier = Modifier.weight(1f)) {
+            LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
                 itemsIndexed(draftEntries) { i, entry ->
-                    val selected = i == state.draftIndex
+                    val selected  = i == state.draftIndex
                     val modeLabel = if (entry.mode == PatchMode.OVERRIDE) "[✓ OVERRIDE]" else "[✓ DEFAULT]"
 
                     Row(

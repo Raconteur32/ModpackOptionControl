@@ -24,7 +24,6 @@ import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.filesystem.applyDiffToDraft
 import fr.raconteur.moc.filesystem.directChildren
 import fr.raconteur.moc.filesystem.isDescendant
-import fr.raconteur.moc.filesystem.openIdeDiff
 import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchEntry
 import fr.raconteur.moc.versioning.PatchList
@@ -37,17 +36,6 @@ private sealed class BrowseMode {
     data class Value(val returnTo: BrowseMode) : BrowseMode()
     object Draft    : BrowseMode()
     object Finalize : BrowseMode()
-}
-
-private fun openFileIdeDiff(filePath: Path, kind: FileDiffKind) {
-    val ext = filePath.toString().substringAfterLast('.', "txt")
-    val oldContent = if (kind != FileDiffKind.NEW)
-        McInstanceRefMocFileSystem.files.find { it.relativePath == filePath }?.getStringContent() ?: ""
-    else ""
-    val newContent = if (kind != FileDiffKind.DELETED)
-        McInstanceMocFileSystem.files.find { it.relativePath == filePath }?.getStringContent() ?: ""
-    else ""
-    openIdeDiff(oldContent, newContent, ext)
 }
 
 private fun draftTag(entry: PatchEntry?, hasSub: Boolean): String = when {
@@ -116,7 +104,6 @@ fun runDiffBrowser() {
             when (k) {
                 Keys.UP      -> if (fileIndex > 0) fileIndex--
                 Keys.DOWN    -> if (fileIndex < entries.size - 1) fileIndex++
-                CharKey('i') -> openFileIdeDiff(entries[fileIndex].key, entries[fileIndex].value.kind)
                 CharKey('e') -> if (draftEntries.isNotEmpty()) { draftIndex = 0; mode = BrowseMode.Draft }
                 CharKey('f') -> if (draftEntries.isNotEmpty()) mode = BrowseMode.Finalize
                 CharKey('d') -> {
@@ -166,7 +153,6 @@ fun runDiffBrowser() {
             val allPaths = entries[fileIndex].value.flatContentDiff.keys.filter { it != "$" }.toList()
             val visible  = directChildren(allPaths, pathStack.last())
             when (k) {
-                CharKey('i') -> openFileIdeDiff(entries[fileIndex].key, entries[fileIndex].value.kind)
                 Keys.UP      -> if (diffIndex > 0) diffIndex--
                 Keys.DOWN    -> if (diffIndex < visible.size - 1) diffIndex++
                 Keys.ENTER   -> {
@@ -221,10 +207,6 @@ fun runDiffBrowser() {
             val inDraft = draftForOption(filePath, vp)
             when (k) {
                 Keys.ESC     -> mode = returnTo
-                CharKey('i') -> if (optDiff is OptionDiff.Changed) {
-                    val ext = filePath.toString().substringAfterLast('.', "txt")
-                    openIdeDiff(optDiff.oldValue, optDiff.newValue, ext)
-                }
                 CharKey('r') -> if (inDraft != null) {
                     DraftPatch.removeEntry(filePath.toString(), vp)
                     draftEntries = DraftPatch.entries.toList()
@@ -312,7 +294,7 @@ fun runDiffBrowser() {
                     if (draftFileEntry(filePath) != null) "r remove" else "d default   o override"
                 } else ""
                 val hints = buildList {
-                    add("↑↓ navigate"); add("↵ open"); add("i diff IDE")
+                    add("↑↓ navigate"); add("↵ open")
                     if (actionHint.isNotEmpty()) add(actionHint)
                     if (draftCount > 0) { add("e entries"); add("f finalize") }
                     add("q quit")
@@ -356,7 +338,7 @@ fun runDiffBrowser() {
                 } else ""
                 val escHint = if (pathStack.size > 1) "esc up" else "esc back"
                 val hints = buildList {
-                    add("↑↓ navigate"); add("↵ enter"); add("i diff IDE")
+                    add("↑↓ navigate"); add("↵ enter")
                     if (actionHint.isNotEmpty()) add(actionHint)
                     add(escHint); add("q quit")
                 }
@@ -392,7 +374,6 @@ fun runDiffBrowser() {
                 }
                 textLine()
                 val hints = buildList {
-                    if (optDiff is OptionDiff.Changed) add("i diff IDE")
                     if (inDraft != null) add("r remove") else { add("d default"); add("o override") }
                     add("esc back"); add("q quit")
                 }

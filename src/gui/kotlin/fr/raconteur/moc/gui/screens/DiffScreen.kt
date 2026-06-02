@@ -5,8 +5,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -15,13 +17,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fr.raconteur.moc.content.OptionDiff
-import fr.raconteur.moc.filesystem.applyDiffToDraft
 import fr.raconteur.moc.filesystem.directChildren
 import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.gui.AppState
 import fr.raconteur.moc.gui.Screen
 import fr.raconteur.moc.gui.components.DraftBadge
-import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchEntry
 import fr.raconteur.moc.versioning.PatchMode
 
@@ -31,47 +31,18 @@ private fun draftForOption(draftEntries: List<PatchEntry>, filePath: String, opt
 private fun hasSubDraft(draftEntries: List<PatchEntry>, filePath: String, parentPath: String): Boolean =
     draftEntries.any { it.filePath == filePath && isDescendant(it.optionPath, parentPath) }
 
-private fun applyOption(state: AppState, filePath: String, selected: String, mode: PatchMode) {
-    val fileDiff = state.entries.find { it.key.toString() == filePath }?.value ?: return
-    val optDiff  = fileDiff.flatContentDiff[selected] ?: return
-    val parentEntry = state.draftEntries.firstOrNull {
-        it.filePath == filePath && isDescendant(selected, it.optionPath)
-    }
-    val children = state.draftEntries.filter {
-        it.filePath == filePath && isDescendant(it.optionPath, selected)
-    }
-    when {
-        parentEntry != null -> {
-            state.confirmMessage = "Parent entry « ${parentEntry.optionPath} » [${parentEntry.mode}] will be removed."
-            state.confirmAction = {
-                DraftPatch.removeEntry(parentEntry.filePath, parentEntry.optionPath)
-                applyDiffToDraft(optDiff, mode)
-                state.refreshDraft()
-            }
-        }
-        children.isNotEmpty() -> {
-            state.confirmMessage = "${children.size} sub-entr${if (children.size > 1) "ies" else "y"} will be removed."
-            state.confirmAction = {
-                children.forEach { DraftPatch.removeEntry(it.filePath, it.optionPath) }
-                applyDiffToDraft(optDiff, mode)
-                state.refreshDraft()
-            }
-        }
-        else -> { applyDiffToDraft(optDiff, mode); state.refreshDraft() }
-    }
-}
-
 @Composable
 fun DiffScreen(state: AppState) {
     val (filePath, fileDiff) = state.entries[state.fileIndex]
-    val filePathStr   = filePath.toString()
-    val allPaths      = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
-    val currentParent = state.pathStack.last()
-    val visible       = directChildren(allPaths, currentParent)
-    val draftEntries  = state.draftEntries
+    val filePathStr  = filePath.toString()
+    val allPaths     = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
+    val visible      = state.visibleDiffItems()
+    val draftEntries = state.draftEntries
+    val listState    = rememberLazyListState()
+
+    LaunchedEffect(state.diffIndex) { listState.scrollToItem(state.diffIndex) }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-        // Breadcrumb
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("DIFF", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(Modifier.width(12.dp))
@@ -86,14 +57,14 @@ fun DiffScreen(state: AppState) {
         if (visible.isEmpty()) {
             Text("(no sub-items)", color = Color.Gray, modifier = Modifier.padding(8.dp))
         } else {
-            LazyColumn(modifier = Modifier.weight(1f)) {
+            LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
                 itemsIndexed(visible) { i, path ->
-                    val selected      = i == state.diffIndex
-                    val entry         = fileDiff.flatContentDiff[path]
-                    val hasChildren   = directChildren(allPaths, path).isNotEmpty()
-                    val entryDraft    = draftForOption(draftEntries, filePathStr, path)
-                    val hasSub        = hasSubDraft(draftEntries, filePathStr, path)
-                    val draftLabel    = when {
+                    val selected    = i == state.diffIndex
+                    val entry       = fileDiff.flatContentDiff[path]
+                    val hasChildren = directChildren(allPaths, path).isNotEmpty()
+                    val entryDraft  = draftForOption(draftEntries, filePathStr, path)
+                    val hasSub      = hasSubDraft(draftEntries, filePathStr, path)
+                    val draftLabel  = when {
                         entryDraft?.mode == PatchMode.OVERRIDE -> "[✓ O]"
                         entryDraft?.mode == PatchMode.DEFAULT  -> "[✓ D]"
                         hasSub                                  -> "[…]"
@@ -119,10 +90,7 @@ fun DiffScreen(state: AppState) {
                         Spacer(Modifier.width(8.dp))
                         Text(path, fontFamily = FontFamily.Monospace, fontSize = 13.sp, modifier = Modifier.weight(1f))
                         if (draftLabel != null) { DraftBadge(draftLabel) }
-                        if (hasChildren) {
-                            Spacer(Modifier.width(6.dp))
-                            Text("▶", color = Color.Gray, fontSize = 11.sp)
-                        }
+                        if (hasChildren) { Spacer(Modifier.width(6.dp)); Text("▶", color = Color.Gray, fontSize = 11.sp) }
                     }
                     Divider(color = Color.Gray.copy(alpha = 0.15f), thickness = 0.5.dp)
                 }
@@ -131,36 +99,23 @@ fun DiffScreen(state: AppState) {
 
         Spacer(Modifier.height(12.dp))
 
-        // Action bar
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             if (state.pathStack.size > 1) {
-                OutlinedButton(onClick = { state.pathStack = state.pathStack.dropLast(1); state.diffIndex = 0 })
-                { Text("↑  Up") }
+                OutlinedButton(onClick = { state.goBack() }) { Text("↑  Up") }
             } else {
                 OutlinedButton(onClick = { state.screen = Screen.Files }) { Text("←  Back") }
             }
 
             if (visible.isNotEmpty()) {
-                val sel       = visible[state.diffIndex]
-                val hasChildren = directChildren(allPaths, sel).isNotEmpty()
-                val entryDraft  = draftForOption(draftEntries, filePathStr, sel)
+                val entryDraft = state.currentOptionDraftEntry()
 
-                OutlinedButton(onClick = {
-                    if (hasChildren) {
-                        state.pathStack = state.pathStack + sel; state.diffIndex = 0
-                    } else {
-                        state.valuePath = sel
-                        state.screen = Screen.Value(returnTo = Screen.Diff)
-                    }
-                }) { Text("↵  Open") }
+                OutlinedButton(onClick = { state.openSelected() }) { Text("↵  Open") }
 
                 if (entryDraft == null) {
-                    Button(onClick = { applyOption(state, filePathStr, sel, PatchMode.DEFAULT) })  { Text("D  Default") }
-                    Button(onClick = { applyOption(state, filePathStr, sel, PatchMode.OVERRIDE) }) { Text("O  Override") }
+                    Button(onClick = { state.applyCurrentOption(PatchMode.DEFAULT) })  { Text("D  Default") }
+                    Button(onClick = { state.applyCurrentOption(PatchMode.OVERRIDE) }) { Text("O  Override") }
                 } else {
-                    OutlinedButton(onClick = {
-                        DraftPatch.removeEntry(filePathStr, sel); state.refreshDraft()
-                    }) { Text("R  Remove") }
+                    OutlinedButton(onClick = { state.removeCurrentOptionDraft() }) { Text("R  Remove") }
                 }
             }
         }

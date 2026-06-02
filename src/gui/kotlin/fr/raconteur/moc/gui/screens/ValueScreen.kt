@@ -15,15 +15,11 @@ import androidx.compose.ui.unit.sp
 import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.applyDiffToDraft
 import fr.raconteur.moc.filesystem.isDescendant
-import fr.raconteur.moc.filesystem.openIdeDiff
 import fr.raconteur.moc.gui.AppState
 import fr.raconteur.moc.gui.Screen
 import fr.raconteur.moc.gui.components.DraftBadge
 import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchMode
-
-private fun preview(v: Any?) = v?.toString()?.replace("\n", "↵")
-    ?.take(2000) ?: "null"
 
 @Composable
 fun ValueScreen(state: AppState, returnTo: Screen) {
@@ -31,6 +27,16 @@ fun ValueScreen(state: AppState, returnTo: Screen) {
     val vp      = state.valuePath ?: return
     val optDiff = fileDiff.flatContentDiff[vp]
     val inDraft = state.draftEntries.find { it.filePath == filePath.toString() && it.optionPath == vp }
+
+    fun render(v: Any?): String {
+        val s = v?.toString() ?: "null"
+        return if (state.valueRawMode) s.take(4000)
+               else {
+                   val unquoted = if (s.length >= 2 && s.startsWith("\"") && s.endsWith("\""))
+                       s.substring(1, s.length - 1) else s
+                   unquoted.replace("\\n", "\n").replace("\\t", "\t").take(4000)
+               }
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         // Breadcrumb
@@ -46,6 +52,17 @@ fun ValueScreen(state: AppState, returnTo: Screen) {
                 Spacer(Modifier.width(10.dp))
                 DraftBadge("[✓ ${inDraft.mode}]")
             }
+            Spacer(Modifier.weight(1f))
+            // Raw / Rendered toggle
+            OutlinedButton(
+                onClick = { state.valueRawMode = !state.valueRawMode },
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    if (state.valueRawMode) "T  Render \\n" else "T  Raw",
+                    fontSize = 12.sp
+                )
+            }
         }
         Spacer(Modifier.height(16.dp))
 
@@ -54,9 +71,9 @@ fun ValueScreen(state: AppState, returnTo: Screen) {
             is OptionDiff.New -> {
                 Text("+ New", color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
-                Card(modifier = Modifier.fillMaxWidth(), elevation = 2.dp) {
+                Card(modifier = Modifier.fillMaxWidth().weight(1f), elevation = 2.dp) {
                     Text(
-                        text = preview(optDiff.newValue),
+                        text = render(optDiff.newValue),
                         fontFamily = FontFamily.Monospace, fontSize = 12.sp,
                         modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState())
                     )
@@ -65,10 +82,10 @@ fun ValueScreen(state: AppState, returnTo: Screen) {
             is OptionDiff.Deleted -> {
                 Text("- Deleted", color = Color(0xFFC62828), fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(Modifier.height(8.dp))
-                Card(modifier = Modifier.fillMaxWidth(), elevation = 2.dp,
+                Card(modifier = Modifier.fillMaxWidth().weight(1f), elevation = 2.dp,
                     backgroundColor = Color(0xFFFFF3F3)) {
                     Text(
-                        text = preview(optDiff.oldValue),
+                        text = render(optDiff.oldValue),
                         fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color(0xFFC62828),
                         modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState())
                     )
@@ -82,7 +99,7 @@ fun ValueScreen(state: AppState, returnTo: Screen) {
                         Card(modifier = Modifier.fillMaxSize(), elevation = 2.dp,
                             backgroundColor = Color(0xFFFFF3F3)) {
                             Text(
-                                text = preview(optDiff.oldValue),
+                                text = render(optDiff.oldValue),
                                 fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color(0xFFC62828),
                                 modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState())
                             )
@@ -94,7 +111,7 @@ fun ValueScreen(state: AppState, returnTo: Screen) {
                         Card(modifier = Modifier.fillMaxSize(), elevation = 2.dp,
                             backgroundColor = Color(0xFFF3FFF3)) {
                             Text(
-                                text = preview(optDiff.newValue),
+                                text = render(optDiff.newValue),
                                 fontFamily = FontFamily.Monospace, fontSize = 12.sp, color = Color(0xFF2E7D32),
                                 modifier = Modifier.padding(12.dp).verticalScroll(rememberScrollState())
                             )
@@ -110,13 +127,6 @@ fun ValueScreen(state: AppState, returnTo: Screen) {
         // Actions
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             OutlinedButton(onClick = { state.screen = returnTo }) { Text("←  Back") }
-
-            if (optDiff is OptionDiff.Changed) {
-                OutlinedButton(onClick = {
-                    val ext = filePath.toString().substringAfterLast('.', "txt")
-                    openIdeDiff(optDiff.oldValue, optDiff.newValue, ext)
-                }) { Text("I  IDE diff") }
-            }
 
             Spacer(Modifier.weight(1f))
 
