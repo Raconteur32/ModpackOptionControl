@@ -15,32 +15,48 @@ import fr.raconteur.moc.versioning.PatchMode
 import java.nio.file.Path
 
 sealed class Screen {
-    object Files   : Screen()
-    object Diff    : Screen()
+    object Files          : Screen()
+    object Diff           : Screen()
     data class Value(val returnTo: Screen) : Screen()
-    object Draft   : Screen()
-    object Finalize: Screen()
+    object Draft          : Screen()
+    object Finalize       : Screen()
+    object IgnoreSession  : Screen()
+    object IgnoreValue    : Screen()
+    object IgnorePermanent: Screen()
 }
 
 enum class AppTab(val label: String) {
     Changes("Changes"),
-    Draft("Draft")
+    Draft("Draft"),
+    IgnoreSession("Skip · Patch"),
+    IgnoreValue("Skip · Value"),
+    IgnorePermanent("Skip · Always")
 }
 
 private fun tabOf(s: Screen): AppTab = when (s) {
     is Screen.Files, is Screen.Diff, is Screen.Value -> AppTab.Changes
     is Screen.Draft, is Screen.Finalize              -> AppTab.Draft
+    is Screen.IgnoreSession                          -> AppTab.IgnoreSession
+    is Screen.IgnoreValue                            -> AppTab.IgnoreValue
+    is Screen.IgnorePermanent                        -> AppTab.IgnorePermanent
 }
 
 class AppState {
     var entries      by mutableStateOf(loadDiff())
     var draftEntries by mutableStateOf<List<PatchEntry>>(DraftPatch.entries.toList())
 
+    var ignoreSessionEntries   by mutableStateOf(IgnoreStore.sessionIgnores)
+    var ignoreValueEntries     by mutableStateOf(IgnoreStore.valueIgnores)
+    var ignorePermanentEntries by mutableStateOf(IgnoreStore.permanentIgnores)
+
     var currentTab by mutableStateOf(AppTab.Changes)
         private set
 
-    private var savedChangesScreen: Screen = Screen.Files
-    private var savedDraftScreen: Screen   = Screen.Draft
+    private var savedChangesScreen:         Screen = Screen.Files
+    private var savedDraftScreen:           Screen = Screen.Draft
+    private var savedIgnoreSessionScreen:   Screen = Screen.IgnoreSession
+    private var savedIgnoreValueScreen:     Screen = Screen.IgnoreValue
+    private var savedIgnorePermanentScreen: Screen = Screen.IgnorePermanent
 
     private var _screen by mutableStateOf<Screen>(Screen.Files)
     var screen: Screen
@@ -56,8 +72,11 @@ class AppState {
 
     private fun saveCurrentTabScreen() {
         when (currentTab) {
-            AppTab.Changes -> savedChangesScreen = _screen
-            AppTab.Draft   -> savedDraftScreen   = _screen
+            AppTab.Changes         -> savedChangesScreen         = _screen
+            AppTab.Draft           -> savedDraftScreen           = _screen
+            AppTab.IgnoreSession   -> savedIgnoreSessionScreen   = _screen
+            AppTab.IgnoreValue     -> savedIgnoreValueScreen     = _screen
+            AppTab.IgnorePermanent -> savedIgnorePermanentScreen = _screen
         }
     }
 
@@ -66,8 +85,11 @@ class AppState {
         saveCurrentTabScreen()
         currentTab = tab
         _screen = when (tab) {
-            AppTab.Changes -> savedChangesScreen
-            AppTab.Draft   -> savedDraftScreen
+            AppTab.Changes         -> savedChangesScreen
+            AppTab.Draft           -> savedDraftScreen
+            AppTab.IgnoreSession   -> savedIgnoreSessionScreen
+            AppTab.IgnoreValue     -> savedIgnoreValueScreen
+            AppTab.IgnorePermanent -> savedIgnorePermanentScreen
         }
     }
 
@@ -79,6 +101,7 @@ class AppState {
     var fileIndex    by mutableStateOf(0)
     var diffIndex    by mutableStateOf(0)
     var draftIndex   by mutableStateOf(0)
+    var ignoreIndex  by mutableStateOf(0)
     var pathStack    by mutableStateOf(listOf("$"))
     var valuePath    by mutableStateOf<String?>(null)
     var patchName    by mutableStateOf("")
@@ -86,6 +109,7 @@ class AppState {
     var confirmMessage by mutableStateOf<String?>(null)
     var confirmAction  by mutableStateOf<(() -> Unit)?>(null)
     var valueRawMode   by mutableStateOf(true)
+    var ignoreDialogVisible by mutableStateOf(false)
 
     fun refreshDiff() {
         entries = loadDiff()
@@ -95,6 +119,21 @@ class AppState {
     fun refreshDraft() {
         draftEntries = DraftPatch.entries.toList()
         draftIndex = draftIndex.coerceIn(0, (draftEntries.size - 1).coerceAtLeast(0))
+    }
+
+    fun refreshIgnore() {
+        ignoreSessionEntries   = IgnoreStore.sessionIgnores
+        ignoreValueEntries     = IgnoreStore.valueIgnores
+        ignorePermanentEntries = IgnoreStore.permanentIgnores
+        val n = currentIgnoreEntries().size
+        ignoreIndex = ignoreIndex.coerceIn(0, (n - 1).coerceAtLeast(0))
+    }
+
+    fun currentIgnoreEntries(): List<IgnoreEntry> = when (screen) {
+        is Screen.IgnoreSession   -> ignoreSessionEntries
+        is Screen.IgnoreValue     -> ignoreValueEntries
+        is Screen.IgnorePermanent -> ignorePermanentEntries
+        else                      -> emptyList()
     }
 
     fun currentFilePath(): Path? = entries.getOrNull(fileIndex)?.key
@@ -107,6 +146,8 @@ class AppState {
             is Screen.Files -> if (fileIndex > 0) fileIndex--
             is Screen.Diff  -> if (diffIndex > 0) diffIndex--
             is Screen.Draft -> if (draftIndex > 0) draftIndex--
+            is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent ->
+                if (ignoreIndex > 0) ignoreIndex--
             else -> {}
         }
     }
@@ -117,6 +158,10 @@ class AppState {
             is Screen.Files -> if (fileIndex < entries.size - 1) fileIndex++
             is Screen.Diff  -> { val n = visibleDiffItems().size; if (diffIndex < n - 1) diffIndex++ }
             is Screen.Draft -> if (draftIndex < draftEntries.size - 1) draftIndex++
+            is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent -> {
+                val n = currentIgnoreEntries().size
+                if (ignoreIndex < n - 1) ignoreIndex++
+            }
             else -> {}
         }
     }
@@ -138,6 +183,8 @@ class AppState {
             is Screen.Value    -> screen = s.returnTo
             is Screen.Draft    -> screen = Screen.Files
             is Screen.Finalize -> { patchName = ""; screen = Screen.Files }
+            is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent ->
+                screen = Screen.Files
             else -> {}
         }
     }
@@ -183,8 +230,11 @@ class AppState {
 
     fun visibleDiffItems(): List<String> {
         val fileDiff = entries.getOrNull(fileIndex)?.value ?: return emptyList()
+        val fp       = entries.getOrNull(fileIndex)?.key?.toString() ?: return emptyList()
         val allPaths = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
-        return directChildren(allPaths, pathStack.last())
+        return directChildren(allPaths, pathStack.last()).filter { path ->
+            !IgnoreStore.isIgnored(fp, path, fileDiff.flatContentDiff[path]?.newValue)
+        }
     }
 
     fun currentOptionDraftEntry(): PatchEntry? {
@@ -266,6 +316,57 @@ class AppState {
         refreshDraft()
     }
 
+    // ── Ignore actions ─────────────────────────────────────────────────────
+
+    fun showIgnoreDialog() {
+        if (ignoreDialogVisible || confirmMessage != null) return
+        ignoreDialogVisible = true
+    }
+
+    fun applyCurrentIgnore(kind: IgnoreKind) {
+        ignoreDialogVisible = false
+        val (fp, optionPath, newValue) = when (screen) {
+            is Screen.Files -> {
+                val fileDiff = entries.getOrNull(fileIndex)?.value ?: return
+                val path     = entries.getOrNull(fileIndex)?.key?.toString() ?: return
+                val rootPath = if (fileDiff.kind == FileDiffKind.DELETED) "" else "$"
+                Triple(path, rootPath, fileDiff.flatContentDiff[rootPath]?.newValue)
+            }
+            is Screen.Diff -> {
+                val path    = entries.getOrNull(fileIndex)?.key?.toString() ?: return
+                val visible = visibleDiffItems()
+                if (visible.isEmpty()) return
+                val sel     = visible[diffIndex]
+                val optDiff = entries.getOrNull(fileIndex)?.value?.flatContentDiff?.get(sel) ?: return
+                Triple(path, sel, optDiff.newValue)
+            }
+            is Screen.Value -> {
+                val path    = entries.getOrNull(fileIndex)?.key?.toString() ?: return
+                val vp      = valuePath ?: return
+                val optDiff = entries.getOrNull(fileIndex)?.value?.flatContentDiff?.get(vp) ?: return
+                Triple(path, vp, optDiff.newValue)
+            }
+            else -> return
+        }
+        val targetValue = if (kind == IgnoreKind.Value) newValue?.toString() else null
+        IgnoreStore.add(IgnoreEntry(fp, optionPath, targetValue), kind)
+        refreshIgnore()
+        refreshDiff()
+    }
+
+    fun removeCurrentIgnoreEntry() {
+        val kind = when (screen) {
+            is Screen.IgnoreSession   -> IgnoreKind.Session
+            is Screen.IgnoreValue     -> IgnoreKind.Value
+            is Screen.IgnorePermanent -> IgnoreKind.Permanent
+            else -> return
+        }
+        val entry = currentIgnoreEntries().getOrNull(ignoreIndex) ?: return
+        IgnoreStore.remove(entry.filePath, entry.optionPath, kind)
+        refreshIgnore()
+        refreshDiff()
+    }
+
     // ── Private ───────────────────────────────────────────────────────────
 
     private fun navigateIntoFile() {
@@ -292,5 +393,11 @@ class AppState {
     }
 
     private fun loadDiff() =
-        McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem).entries.sortedBy { it.key.toString() }
+        McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem).entries
+            .sortedBy { it.key.toString() }
+            .filter { (path, fileDiff) ->
+                val fp       = path.toString()
+                val rootPath = if (fileDiff.kind == FileDiffKind.DELETED) "" else "$"
+                !IgnoreStore.isIgnored(fp, rootPath, fileDiff.flatContentDiff[rootPath]?.newValue)
+            }
 }

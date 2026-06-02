@@ -25,7 +25,17 @@ fun main() {
             title = "MOC — Modpack Options Control",
             state = rememberWindowState(width = 1100.dp, height = 720.dp),
             onPreviewKeyEvent = { event ->
-                if (event.type != KeyEventType.KeyDown || state.confirmMessage != null) {
+                if (event.type != KeyEventType.KeyDown) {
+                    false
+                } else if (state.ignoreDialogVisible) {
+                    when (event.key) {
+                        Key.One    -> { state.applyCurrentIgnore(IgnoreKind.Session);   true }
+                        Key.Two    -> { state.applyCurrentIgnore(IgnoreKind.Value);     true }
+                        Key.Three  -> { state.applyCurrentIgnore(IgnoreKind.Permanent); true }
+                        Key.Escape -> { state.ignoreDialogVisible = false;              true }
+                        else -> false
+                    }
+                } else if (state.confirmMessage != null) {
                     false
                 } else if (event.key == Key.Tab) {
                     state.switchToNextTab(); true
@@ -38,6 +48,7 @@ fun main() {
                         Key.D                                 -> { state.applyCurrentFile(PatchMode.DEFAULT);  true }
                         Key.O                                 -> { state.applyCurrentFile(PatchMode.OVERRIDE); true }
                         Key.R                                 -> { state.removeCurrentFileDraft();            true }
+                        Key.I                                 -> { state.showIgnoreDialog();                  true }
                         Key.E -> {
                             if (state.draftEntries.isNotEmpty()) { state.draftIndex = 0; state.screen = Screen.Draft }
                             true
@@ -56,6 +67,7 @@ fun main() {
                         Key.D                                 -> { state.applyCurrentOption(PatchMode.DEFAULT);  true }
                         Key.O                                 -> { state.applyCurrentOption(PatchMode.OVERRIDE); true }
                         Key.R                                 -> { state.removeCurrentOptionDraft();             true }
+                        Key.I                                 -> { state.showIgnoreDialog();                    true }
                         else -> false
                     }
                     is Screen.Draft -> when (event.key) {
@@ -75,6 +87,14 @@ fun main() {
                         Key.D                         -> { state.applyCurrentValue(PatchMode.DEFAULT);  true }
                         Key.O                         -> { state.applyCurrentValue(PatchMode.OVERRIDE); true }
                         Key.R                         -> { state.removeCurrentValueDraft();             true }
+                        Key.I                         -> { state.showIgnoreDialog();                    true }
+                        else -> false
+                    }
+                    is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent -> when (event.key) {
+                        Key.DirectionUp               -> { state.moveUp();                    true }
+                        Key.DirectionDown             -> { state.moveDown();                  true }
+                        Key.Escape                    -> { state.goBack();                    true }
+                        Key.R                         -> { state.removeCurrentIgnoreEntry();  true }
                         else -> false
                     }
                     else -> false

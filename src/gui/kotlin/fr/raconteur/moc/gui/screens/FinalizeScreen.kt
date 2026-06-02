@@ -10,6 +10,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fr.raconteur.moc.gui.AppState
+import fr.raconteur.moc.gui.IgnoreStore
 import fr.raconteur.moc.gui.Screen
 import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchList
@@ -54,9 +55,11 @@ fun FinalizeScreen(state: AppState) {
                 onClick = {
                     if (state.patchName.isNotBlank() && state.patchNameError == null) {
                         DraftPatch.finalize(state.patchName)
+                        IgnoreStore.resetSession()
                         state.patchName = ""
                         state.refreshDiff()
                         state.refreshDraft()
+                        state.refreshIgnore()
                         state.fileIndex = 0
                         state.diffIndex = 0
                         state.pathStack = listOf("$")
