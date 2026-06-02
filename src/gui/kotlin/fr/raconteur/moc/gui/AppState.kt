@@ -22,10 +22,60 @@ sealed class Screen {
     object Finalize: Screen()
 }
 
+enum class AppTab(val label: String) {
+    Changes("Changes"),
+    Draft("Draft")
+}
+
+private fun tabOf(s: Screen): AppTab = when (s) {
+    is Screen.Files, is Screen.Diff, is Screen.Value -> AppTab.Changes
+    is Screen.Draft, is Screen.Finalize              -> AppTab.Draft
+}
+
 class AppState {
     var entries      by mutableStateOf(loadDiff())
     var draftEntries by mutableStateOf<List<PatchEntry>>(DraftPatch.entries.toList())
-    var screen       by mutableStateOf<Screen>(Screen.Files)
+
+    var currentTab by mutableStateOf(AppTab.Changes)
+        private set
+
+    private var savedChangesScreen: Screen = Screen.Files
+    private var savedDraftScreen: Screen   = Screen.Draft
+
+    private var _screen by mutableStateOf<Screen>(Screen.Files)
+    var screen: Screen
+        get() = _screen
+        set(value) {
+            val newTab = tabOf(value)
+            if (newTab != currentTab) {
+                saveCurrentTabScreen()
+                currentTab = newTab
+            }
+            _screen = value
+        }
+
+    private fun saveCurrentTabScreen() {
+        when (currentTab) {
+            AppTab.Changes -> savedChangesScreen = _screen
+            AppTab.Draft   -> savedDraftScreen   = _screen
+        }
+    }
+
+    fun switchTab(tab: AppTab) {
+        if (tab == currentTab) return
+        saveCurrentTabScreen()
+        currentTab = tab
+        _screen = when (tab) {
+            AppTab.Changes -> savedChangesScreen
+            AppTab.Draft   -> savedDraftScreen
+        }
+    }
+
+    fun switchToNextTab() {
+        val tabs = AppTab.entries
+        switchTab(tabs[(currentTab.ordinal + 1) % tabs.size])
+    }
+
     var fileIndex    by mutableStateOf(0)
     var diffIndex    by mutableStateOf(0)
     var draftIndex   by mutableStateOf(0)
@@ -173,6 +223,46 @@ class AppState {
         val visible  = visibleDiffItems()
         if (visible.isEmpty()) return
         DraftPatch.removeEntry(filePath, visible[diffIndex])
+        refreshDraft()
+    }
+
+    // ── Value-level actions (ValueScreen) ─────────────────────────────────
+
+    fun applyCurrentValue(mode: PatchMode) {
+        if (confirmMessage != null) return
+        val filePath = entries.getOrNull(fileIndex)?.key?.toString() ?: return
+        val vp       = valuePath ?: return
+        val fileDiff = entries.getOrNull(fileIndex)?.value ?: return
+        val optDiff  = fileDiff.flatContentDiff[vp] ?: return
+        val parentEntry = draftEntries.firstOrNull { it.filePath == filePath && isDescendant(vp, it.optionPath) }
+        val children    = draftEntries.filter    { it.filePath == filePath && isDescendant(it.optionPath, vp) }
+        when {
+            parentEntry != null -> {
+                confirmMessage = "Parent entry « ${parentEntry.optionPath} » [${parentEntry.mode}] will be removed."
+                confirmAction  = { DraftPatch.removeEntry(parentEntry.filePath, parentEntry.optionPath); applyDiffToDraft(optDiff, mode); refreshDraft() }
+            }
+            children.isNotEmpty() -> {
+                confirmMessage = "${children.size} sub-entr${if (children.size > 1) "ies" else "y"} will be removed."
+                confirmAction  = { children.forEach { DraftPatch.removeEntry(it.filePath, it.optionPath) }; applyDiffToDraft(optDiff, mode); refreshDraft() }
+            }
+            else -> { applyDiffToDraft(optDiff, mode); refreshDraft() }
+        }
+    }
+
+    fun removeCurrentValueDraft() {
+        if (confirmMessage != null) return
+        val fp = entries.getOrNull(fileIndex)?.key?.toString() ?: return
+        val vp = valuePath ?: return
+        DraftPatch.removeEntry(fp, vp)
+        refreshDraft()
+    }
+
+    // ── Draft-level actions (DraftScreen) ─────────────────────────────────
+
+    fun removeCurrentDraftEntry() {
+        if (confirmMessage != null) return
+        val entry = draftEntries.getOrNull(draftIndex) ?: return
+        DraftPatch.removeEntry(entry.filePath, entry.optionPath)
         refreshDraft()
     }
 

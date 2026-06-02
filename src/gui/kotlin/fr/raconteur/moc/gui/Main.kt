@@ -27,6 +27,8 @@ fun main() {
             onPreviewKeyEvent = { event ->
                 if (event.type != KeyEventType.KeyDown || state.confirmMessage != null) {
                     false
+                } else if (event.key == Key.Tab) {
+                    state.switchToNextTab(); true
                 } else when (state.screen) {
                     is Screen.Files -> when (event.key) {
                         Key.DirectionUp                       -> { state.moveUp();                           true }
@@ -57,9 +59,10 @@ fun main() {
                         else -> false
                     }
                     is Screen.Draft -> when (event.key) {
-                        Key.DirectionUp               -> { state.moveUp();   true }
-                        Key.DirectionDown             -> { state.moveDown(); true }
-                        Key.Escape, Key.DirectionLeft -> { state.goBack();   true }
+                        Key.DirectionUp               -> { state.moveUp();                 true }
+                        Key.DirectionDown             -> { state.moveDown();               true }
+                        Key.Escape, Key.DirectionLeft -> { state.goBack();                 true }
+                        Key.R                         -> { state.removeCurrentDraftEntry(); true }
                         Key.F -> {
                             if (state.draftEntries.isNotEmpty()) state.screen = Screen.Finalize
                             true
@@ -67,8 +70,11 @@ fun main() {
                         else -> false
                     }
                     is Screen.Value -> when (event.key) {
-                        Key.Escape, Key.DirectionLeft -> { state.goBack();                          true }
-                        Key.T                         -> { state.valueRawMode = !state.valueRawMode; true }
+                        Key.Escape, Key.DirectionLeft -> { state.goBack();                           true }
+                        Key.T                         -> { state.valueRawMode = !state.valueRawMode;  true }
+                        Key.D                         -> { state.applyCurrentValue(PatchMode.DEFAULT);  true }
+                        Key.O                         -> { state.applyCurrentValue(PatchMode.OVERRIDE); true }
+                        Key.R                         -> { state.removeCurrentValueDraft();             true }
                         else -> false
                     }
                     else -> false

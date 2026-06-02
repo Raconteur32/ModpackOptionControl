@@ -13,12 +13,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fr.raconteur.moc.content.OptionDiff
-import fr.raconteur.moc.filesystem.applyDiffToDraft
-import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.gui.AppState
 import fr.raconteur.moc.gui.Screen
 import fr.raconteur.moc.gui.components.DraftBadge
-import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchMode
 
 @Composable
@@ -131,37 +128,10 @@ fun ValueScreen(state: AppState, returnTo: Screen) {
             Spacer(Modifier.weight(1f))
 
             if (inDraft != null) {
-                OutlinedButton(onClick = {
-                    DraftPatch.removeEntry(filePath.toString(), vp); state.refreshDraft()
-                }) { Text("R  Remove from draft") }
+                OutlinedButton(onClick = { state.removeCurrentValueDraft() }) { Text("R  Remove from draft") }
             } else if (optDiff != null) {
-                val parentEntry = state.draftEntries.firstOrNull {
-                    it.filePath == filePath.toString() && isDescendant(vp, it.optionPath)
-                }
-                val children = state.draftEntries.filter {
-                    it.filePath == filePath.toString() && isDescendant(it.optionPath, vp)
-                }
-                fun doApply(mode: PatchMode) {
-                    when {
-                        parentEntry != null -> {
-                            state.confirmMessage = "Parent entry « ${parentEntry.optionPath} » [${parentEntry.mode}] will be removed."
-                            state.confirmAction = {
-                                DraftPatch.removeEntry(parentEntry.filePath, parentEntry.optionPath)
-                                applyDiffToDraft(optDiff, mode); state.refreshDraft()
-                            }
-                        }
-                        children.isNotEmpty() -> {
-                            state.confirmMessage = "${children.size} sub-entr${if (children.size > 1) "ies" else "y"} will be removed."
-                            state.confirmAction = {
-                                children.forEach { DraftPatch.removeEntry(it.filePath, it.optionPath) }
-                                applyDiffToDraft(optDiff, mode); state.refreshDraft()
-                            }
-                        }
-                        else -> { applyDiffToDraft(optDiff, mode); state.refreshDraft() }
-                    }
-                }
-                Button(onClick = { doApply(PatchMode.DEFAULT) })  { Text("D  Default") }
-                Button(onClick = { doApply(PatchMode.OVERRIDE) }) { Text("O  Override") }
+                Button(onClick = { state.applyCurrentValue(PatchMode.DEFAULT) })  { Text("D  Default") }
+                Button(onClick = { state.applyCurrentValue(PatchMode.OVERRIDE) }) { Text("O  Override") }
             }
         }
     }
