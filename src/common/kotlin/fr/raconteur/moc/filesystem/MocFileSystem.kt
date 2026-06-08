@@ -1,17 +1,15 @@
 package fr.raconteur.moc.filesystem
 
 import com.google.gson.GsonBuilder
-import com.google.gson.JsonElement
-import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
-import de.marhali.json5.Json5
 import com.jayway.jsonpath.Configuration
 import com.jayway.jsonpath.DocumentContext
 import com.jayway.jsonpath.JsonPath
 import com.jayway.jsonpath.PathNotFoundException
-import com.jayway.jsonpath.spi.json.GsonJsonProvider
-import com.jayway.jsonpath.spi.mapper.GsonMappingProvider
+import de.marhali.json5.Json5Element
+import de.marhali.json5.Json5Object
 import fr.raconteur.moc.content.TextContentType
+import fr.raconteur.moc.content.anyToJson5Element
 import fr.raconteur.moc.versioning.EntryKind
 import fr.raconteur.moc.versioning.Patch
 import fr.raconteur.moc.versioning.PatchEntry
@@ -26,7 +24,6 @@ open class MocFileSystem(
     private val ignoredPaths: List<Path> = emptyList()
 ) {
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val json5 = Json5()
     private val metadataJsonFile: Path     = rootPath.resolve(".mocmetadata.json")
     private val appliedPatchesFile: Path   = rootPath.resolve(".mocappliedpatches.json")
     private val allMetadata: MutableMap<String, MutableMap<String, String>> = loadAllMetadata()
@@ -99,14 +96,14 @@ open class MocFileSystem(
 
         for ((filePath, entries) in jsonEntries.groupBy { it.filePath }) {
             val file = mocFiles[filePath] ?: continue
-            var content = if (file.exists) file.getStringContent() ?: "{}" else "{}"
+            var element: Json5Element = if (file.exists) file.getContent() ?: Json5Object() else Json5Object()
             for (entry in entries) {
-                content = when (entry.kind) {
-                    EntryKind.VALUE    -> setJsonValue(content, entry.optionPath, entry.toValue)
-                    EntryKind.DELETION -> removeJsonKey(content, entry.optionPath)
+                element = when (entry.kind) {
+                    EntryKind.VALUE    -> setJson5Value(element, entry.optionPath, entry.toValue)
+                    EntryKind.DELETION -> removeJson5Key(element, entry.optionPath)
                 }
             }
-            file.setContent(json5.parse(content))
+            file.setContent(element)
         }
 
         if (patch.metadata.isNotEmpty()) {
@@ -134,24 +131,24 @@ open class MocFileSystem(
         return file.getFlatContent()?.containsKey(entry.optionPath) == true
     }
 
-    private fun setJsonValue(content: String, optionPath: String, value: Any?): String {
-        if (optionPath == "$") return gson.toJson(gson.toJsonTree(value))
+    private fun setJson5Value(element: Json5Element, optionPath: String, value: Any?): Json5Element {
+        if (optionPath == "$") return anyToJson5Element(value)
         val config = Configuration.builder()
-            .jsonProvider(GsonJsonProvider())
-            .mappingProvider(GsonMappingProvider())
+            .jsonProvider(Json5JsonProvider())
+            .mappingProvider(Json5MappingProvider())
             .build()
-        val document = JsonPath.using(config).parse(content)
-        ensureAndSet(document, optionPath, gson.toJsonTree(value))
-        return gson.toJson(document.read<JsonElement>("$"))
+        val document = JsonPath.using(config).parse(element as Any)
+        ensureAndSet(document, optionPath, anyToJson5Element(value))
+        return document.read<Json5Element>("$")
     }
 
     // Crée récursivement les noeuds intermédiaires manquants avant de setter la valeur.
     // Gère la notation bracket ($['a']['b']) et dot ($.a.b).
-    private fun ensureAndSet(document: DocumentContext, path: String, value: JsonElement) {
+    private fun ensureAndSet(document: DocumentContext, path: String, value: Json5Element) {
         try { document.set(path, value); return } catch (_: PathNotFoundException) {}
         val (parentPath, key) = splitLastSegment(path) ?: return
         try { document.read<Any>(parentPath) } catch (_: PathNotFoundException) {
-            ensureAndSet(document, parentPath, JsonObject())
+            ensureAndSet(document, parentPath, Json5Object())
         }
         try { document.put(parentPath, key, value) } catch (_: Exception) {}
     }
@@ -174,14 +171,14 @@ open class MocFileSystem(
         }
     }
 
-    private fun removeJsonKey(content: String, optionPath: String): String {
+    private fun removeJson5Key(element: Json5Element, optionPath: String): Json5Element {
         val config = Configuration.builder()
-            .jsonProvider(GsonJsonProvider())
-            .mappingProvider(GsonMappingProvider())
+            .jsonProvider(Json5JsonProvider())
+            .mappingProvider(Json5MappingProvider())
             .build()
-        val document = JsonPath.using(config).parse(content)
+        val document = JsonPath.using(config).parse(element as Any)
         try { document.delete(optionPath) } catch (_: Exception) {}
-        return gson.toJson(document.read<JsonElement>("$"))
+        return document.read<Json5Element>("$")
     }
 
     private fun scan() {
