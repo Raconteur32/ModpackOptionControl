@@ -9,10 +9,9 @@ import com.jayway.jsonpath.spi.mapper.MappingException
 import com.jayway.jsonpath.spi.mapper.MappingProvider
 import de.marhali.json5.Json5Array
 import de.marhali.json5.Json5Element
-import de.marhali.json5.Json5Null
 import de.marhali.json5.Json5Object
-import de.marhali.json5.Json5Primitive
 import fr.raconteur.moc.content.anyToJson5Element
+import fr.raconteur.moc.content.unwrapJson5Element
 import fr.raconteur.moc.content.json5Reader
 import fr.raconteur.moc.content.json5Writer
 import java.io.InputStream
@@ -90,16 +89,7 @@ class Json5JsonProvider : AbstractJsonProvider() {
 
     override fun toIterable(obj: Any?): Iterable<Any?> = obj as Json5Array
 
-    override fun unwrap(obj: Any?): Any? = when (obj) {
-        is Json5Null      -> null
-        is Json5Primitive -> when {
-            obj.isBoolean -> obj.asBoolean
-            obj.isString  -> obj.asString
-            obj.isNumber  -> obj.asNumber
-            else          -> obj.asString
-        }
-        else -> obj
-    }
+    override fun unwrap(obj: Any?): Any? = unwrapJson5Element(obj)
 }
 
 class Json5MappingProvider : MappingProvider {

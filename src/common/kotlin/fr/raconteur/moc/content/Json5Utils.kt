@@ -12,6 +12,17 @@ val json5Reader: Json5 = Json5.builder {
 
 val json5Writer: Json5 = Json5.builder { it.prettyPrinting().build() }
 
+fun unwrapJson5Element(obj: Any?): Any? = when (obj) {
+    is Json5Null      -> null
+    is Json5Primitive -> when {
+        obj.isBoolean -> obj.asBoolean
+        obj.isString  -> obj.asString
+        obj.isNumber  -> obj.asNumber
+        else          -> obj.asString
+    }
+    else -> obj
+}
+
 fun anyToJson5Element(value: Any?): Json5Element = when (value) {
     null            -> Json5Primitive.fromNull()
     is Json5Element -> value
