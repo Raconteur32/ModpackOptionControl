@@ -3,6 +3,7 @@ package fr.raconteur.moc.content
 import de.marhali.json5.Json5
 import de.marhali.json5.Json5Array
 import de.marhali.json5.Json5Element
+import de.marhali.json5.Json5Null
 import de.marhali.json5.Json5Object
 import de.marhali.json5.Json5Primitive
 

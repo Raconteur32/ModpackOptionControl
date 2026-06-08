@@ -10,6 +10,7 @@ import com.jayway.jsonpath.spi.mapper.MappingProvider
 import de.marhali.json5.Json5Array
 import de.marhali.json5.Json5Element
 import de.marhali.json5.Json5Object
+import de.marhali.json5.Json5Primitive
 import fr.raconteur.moc.content.anyToJson5Element
 import fr.raconteur.moc.content.unwrapJson5Element
 import fr.raconteur.moc.content.json5Reader
