@@ -1,6 +1,6 @@
 package fr.raconteur.moc.filesystem
 
-import com.ibm.icu.text.CharsetDetector
+import org.mozilla.universalchardet.UniversalDetector
 import de.marhali.json5.Json5Array
 import de.marhali.json5.Json5Element
 import de.marhali.json5.Json5Object
@@ -99,10 +99,8 @@ class MocFile private constructor(
             if (isBinary(path)) throw IllegalArgumentException("File appears to be binary: $path")
             detectBOM(path)?.let { return it }
             val data = Files.readAllBytes(path)
-            val detector = CharsetDetector()
-            detector.setText(data)
-            val match = detector.detect()
-            if (match != null && match.confidence >= 50) return match.name
+            val detected = UniversalDetector.detectCharset(path)
+            if (detected != null) return detected
             try {
                 StandardCharsets.UTF_8.newDecoder()
                     .onMalformedInput(CodingErrorAction.REPORT)

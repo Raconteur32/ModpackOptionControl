@@ -71,7 +71,7 @@ dependencies {
 	implementation("net.fabricmc:fabric-language-kotlin:${providers.gradleProperty("fabric_kotlin_version").get()}")
 
 	// Common deps — available to both common and main (via configuration extension)
-	"commonImplementation"("com.ibm.icu:icu4j:76.1")
+	"commonImplementation"("com.github.albfernandez:juniversalchardet:2.5.0")
 	"commonImplementation"("com.jayway.jsonpath:json-path:2.9.0")
 	"commonImplementation"("com.google.code.gson:gson:2.11.0")
 	"commonImplementation"("de.marhali:json5-java:3.0.0")
@@ -79,7 +79,7 @@ dependencies {
 	"commonImplementation"("com.fasterxml.jackson.dataformat:jackson-dataformat-toml:2.18.3")
 
 	// Embedded in the mod JAR via Jar-in-Jar
-	include("com.ibm.icu:icu4j:76.1")
+	include("com.github.albfernandez:juniversalchardet:2.5.0")
 	include("com.jayway.jsonpath:json-path:2.9.0")
 	include("de.marhali:json5-java:3.0.0")
 	include("com.fasterxml.jackson.dataformat:jackson-dataformat-properties:2.18.3")
