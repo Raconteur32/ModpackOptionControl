@@ -25,6 +25,7 @@ object MocPreLaunchEntrypoint : PreLaunchEntrypoint {
                 logger.info("[moc] Applied patch: $patchName")
             } catch (e: Exception) {
                 logger.error("[moc] Failed to apply patch '$patchName': ${e.message}")
+                break
             }
         }
     }
