@@ -8,7 +8,7 @@ import kotlin.io.path.isDirectory
 object GuiPlatformService : PlatformService {
 
     private val detectedGameDir: Path by lazy {
-        val candidates = listOf(Path.of("run"), Path.of("."))
+        val candidates = listOf(Path.of("run"), Path.of("../fabric/run"), Path.of("../run"), Path.of("."))
         candidates.firstOrNull { isValidGameDir(it) }
             ?: error("No valid Minecraft instance found. Expected config/, mods/ and options.txt.")
     }

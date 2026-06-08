@@ -9,6 +9,7 @@ plugins {
 dependencies {
     implementation(project(":common"))
     implementation(compose.desktop.currentOs)
+    implementation("com.google.code.gson:gson:2.11.0")
 }
 
 compose.desktop {
