@@ -9,6 +9,7 @@ import fr.raconteur.moc.content.ContentType
 import fr.raconteur.moc.content.ContentTypeRegistry
 import fr.raconteur.moc.content.FlatContent
 import fr.raconteur.moc.content.FlatContentDiff
+import fr.raconteur.moc.content.PropertiesContentType
 import fr.raconteur.moc.content.TextContentType
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
@@ -82,7 +83,12 @@ class MocFile private constructor(
             return buffer.take(read).any { it == 0.toByte() }
         }
 
+        private val fileNameOverrides: Map<String, ContentType> = mapOf(
+            "options.txt" to PropertiesContentType
+        )
+
         private fun inferContentType(probe: MocFile): ContentType {
+            fileNameOverrides[probe.getFileName()]?.let { return it }
             var bestType: ContentType? = null
             var bestScore = 0
             for (type in ContentTypeRegistry.getAll()) {
