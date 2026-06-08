@@ -88,7 +88,8 @@ class Json5JsonProvider : AbstractJsonProvider() {
         else -> throw JsonPathException("length operation cannot be applied to $obj")
     }
 
-    override fun toIterable(obj: Any?): Iterable<Any?> = obj as Json5Array
+    override fun toIterable(obj: Any?): Iterable<Any?> =
+        (obj as Json5Array).map { unwrap(it) }
 
     override fun unwrap(obj: Any?): Any? = unwrapJson5Element(obj)
 }
