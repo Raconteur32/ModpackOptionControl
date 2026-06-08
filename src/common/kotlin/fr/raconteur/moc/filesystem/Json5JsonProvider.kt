@@ -9,6 +9,7 @@ import com.jayway.jsonpath.spi.mapper.MappingException
 import com.jayway.jsonpath.spi.mapper.MappingProvider
 import de.marhali.json5.Json5Array
 import de.marhali.json5.Json5Element
+import de.marhali.json5.Json5Null
 import de.marhali.json5.Json5Object
 import de.marhali.json5.Json5Primitive
 import fr.raconteur.moc.content.anyToJson5Element
@@ -40,7 +41,7 @@ class Json5JsonProvider : AbstractJsonProvider() {
     override fun isArray(obj: Any?) = obj is Json5Array
     override fun isMap(obj: Any?) = obj is Json5Object
 
-    override fun getArrayIndex(obj: Any?, idx: Int): Any? = (obj as Json5Array)[idx]
+    override fun getArrayIndex(obj: Any?, idx: Int): Any? = unwrap((obj as Json5Array)[idx])
 
     override fun setArrayIndex(array: Any?, index: Int, newValue: Any?) {
         val arr = array as Json5Array
@@ -50,7 +51,7 @@ class Json5JsonProvider : AbstractJsonProvider() {
 
     override fun getMapValue(obj: Any?, key: String): Any? {
         val o = obj as Json5Object
-        return if (o.has(key)) o.get(key) else UNDEFINED
+        return if (o.has(key)) unwrap(o.get(key)) else UNDEFINED
     }
 
     override fun setProperty(obj: Any?, key: Any?, value: Any?) {
@@ -89,7 +90,16 @@ class Json5JsonProvider : AbstractJsonProvider() {
 
     override fun toIterable(obj: Any?): Iterable<Any?> = obj as Json5Array
 
-    override fun unwrap(obj: Any?): Any? = obj
+    override fun unwrap(obj: Any?): Any? = when (obj) {
+        is Json5Null      -> null
+        is Json5Primitive -> when {
+            obj.isBoolean -> obj.asBoolean
+            obj.isString  -> obj.asString
+            obj.isNumber  -> obj.asNumber
+            else          -> obj.asString
+        }
+        else -> obj
+    }
 }
 
 class Json5MappingProvider : MappingProvider {
