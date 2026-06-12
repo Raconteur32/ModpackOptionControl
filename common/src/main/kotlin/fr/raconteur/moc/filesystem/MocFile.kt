@@ -21,7 +21,7 @@ import java.nio.file.Path
 class MocFile private constructor(
     val fileSystem: MocFileSystem,
     val relativePath: Path,
-    val exists: Boolean,
+    var exists: Boolean,
     val metadata: MutableMap<String, String>
 ) {
     val encoding: String
@@ -155,6 +155,7 @@ class MocFile private constructor(
     fun setStringContent(text: String) {
         getAbsolutePath().toFile().parentFile?.mkdirs()
         getAbsolutePath().toFile().writeText(text, Charset.forName(encoding))
+        exists = true
     }
 
     fun getContent(): Json5Element? {

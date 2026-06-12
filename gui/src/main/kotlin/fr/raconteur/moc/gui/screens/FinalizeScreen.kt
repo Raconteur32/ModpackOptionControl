@@ -25,6 +25,10 @@ fun FinalizeScreen(state: AppState) {
         Spacer(Modifier.height(8.dp))
         Text("${state.draftEntries.size} entr${if (state.draftEntries.size != 1) "ies" else "y"} will be committed.",
             color = Color.Gray)
+        if (state.lastCreatedPatch != null) {
+            Spacer(Modifier.height(4.dp))
+            Text("Last patch: « ${state.lastCreatedPatch} »", color = Color.Gray, fontSize = 12.sp)
+        }
         Spacer(Modifier.height(24.dp))
 
         OutlinedTextField(
@@ -56,6 +60,7 @@ fun FinalizeScreen(state: AppState) {
                     if (state.patchName.isNotBlank() && state.patchNameError == null) {
                         DraftPatch.finalize(state.patchName)
                         IgnoreStore.resetSession()
+                        state.lastCreatedPatch = state.patchName
                         state.patchName = ""
                         state.refreshDiff()
                         state.refreshDraft()

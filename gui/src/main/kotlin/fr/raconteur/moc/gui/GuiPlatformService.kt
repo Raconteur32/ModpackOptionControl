@@ -4,13 +4,27 @@ import fr.raconteur.moc.platform.PlatformService
 import java.nio.file.Path
 import kotlin.io.path.exists
 import kotlin.io.path.isDirectory
+import kotlin.system.exitProcess
 
 object GuiPlatformService : PlatformService {
 
+    var gameDirOverride: Path? = null
+
     private val detectedGameDir: Path by lazy {
-        val candidates = listOf(Path.of("run"), Path.of("../fabric/run"), Path.of("../run"), Path.of("."))
-        candidates.firstOrNull { isValidGameDir(it) }
-            ?: error("No valid Minecraft instance found. Expected config/, mods/ and options.txt.")
+        val resolvedOverride = gameDirOverride
+            ?: System.getProperty("moc.gameDir")?.takeIf { it.isNotEmpty() }?.let { Path.of(it) }
+        resolvedOverride?.toAbsolutePath()?.normalize()?.also { override ->
+            if (!isValidGameDir(override)) {
+                System.err.println("[MOC] Specified game directory is not valid (missing config/, mods/ or options.txt): $override")
+                exitProcess(1)
+            }
+        } ?: run {
+            val candidates = listOf(Path.of("."), Path.of(".."), Path.of("run"), Path.of("../fabric/run"), Path.of("../run"))
+            candidates.firstOrNull { isValidGameDir(it) } ?: run {
+                System.err.println("[MOC] No valid Minecraft instance found. Expected config/, mods/ and options.txt in one of: ${candidates.joinToString()}")
+                exitProcess(1)
+            }
+        }
     }
 
     override fun getPlatformName(): String = "Gui"

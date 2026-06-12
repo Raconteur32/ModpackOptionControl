@@ -11,7 +11,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 object DraftPatch {
-    private val gson = GsonBuilder().setPrettyPrinting().registerPreciseNumberStrategy().create()
+    private val gson = GsonBuilder().setPrettyPrinting().create()
     private val draftPath: Path
         get() = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/patch-draft.json")
 
@@ -29,8 +29,7 @@ object DraftPatch {
 
         val currentDiff = McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem)
 
-        val type = object : TypeToken<List<PatchEntry>>() {}.type
-        val raw: List<PatchEntry> = gson.fromJson(file.readText(), type) ?: return
+        val raw = parsePatchEntries(file.readText())
 
         raw.filter { entry ->
             val fileDiff = currentDiff[Path.of(entry.filePath)] ?: return@filter false
@@ -106,7 +105,7 @@ object DraftPatch {
     fun save() {
         val file = draftPath.toFile()
         file.parentFile.mkdirs()
-        file.writeText(gson.toJson(_entries))
+        file.writeText(_entries.toJson5String())
     }
 
     fun clear() {
@@ -119,7 +118,7 @@ object DraftPatch {
         val dir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName")
         dir.toFile().mkdirs()
 
-        dir.resolve("patch.json").toFile().writeText(gson.toJson(_entries))
+        dir.resolve("patch.json").toFile().writeText(_entries.toJson5String())
 
         val patchFilePaths = _entries.map { it.filePath }.toSet()
         val metaType = object : TypeToken<Map<String, Map<String, String>>>() {}.type

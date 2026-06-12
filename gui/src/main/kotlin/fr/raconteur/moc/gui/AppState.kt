@@ -11,6 +11,7 @@ import fr.raconteur.moc.filesystem.directChildren
 import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchEntry
+import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.PatchMode
 import java.nio.file.Path
 
@@ -106,6 +107,7 @@ class AppState {
     var valuePath    by mutableStateOf<String?>(null)
     var patchName    by mutableStateOf("")
     var patchNameError by mutableStateOf<String?>(null)
+    var lastCreatedPatch by mutableStateOf(PatchList.getAll().lastOrNull())
     var confirmMessage by mutableStateOf<String?>(null)
     var confirmAction  by mutableStateOf<(() -> Unit)?>(null)
     var valueRawMode   by mutableStateOf(true)

@@ -10,15 +10,14 @@ class Patch(
     val metadata: Map<String, Map<String, String>> = emptyMap()
 ) {
     companion object {
-        private val gson = GsonBuilder().setPrettyPrinting().registerPreciseNumberStrategy().create()
+        private val gson = GsonBuilder().setPrettyPrinting().create()
 
         fun load(patchName: String): Patch {
             val dir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName")
-            val entriesType = object : TypeToken<List<PatchEntry>>() {}.type
             val metaType = object : TypeToken<Map<String, Map<String, String>>>() {}.type
 
             val entries: List<PatchEntry> = try {
-                gson.fromJson(dir.resolve("patch.json").toFile().readText(), entriesType) ?: emptyList()
+                parsePatchEntries(dir.resolve("patch.json").toFile().readText())
             } catch (_: Exception) { emptyList() }
 
             val metadata: Map<String, Map<String, String>> = try {
