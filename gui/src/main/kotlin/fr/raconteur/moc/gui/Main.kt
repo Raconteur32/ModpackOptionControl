@@ -28,12 +28,26 @@ fun main(args: Array<String>) {
             onPreviewKeyEvent = { event ->
                 if (event.type != KeyEventType.KeyDown) {
                     false
+                } else if (state.ignoreDirDialogVisible) {
+                    when (event.key) {
+                        Key.Escape -> { state.ignoreDirDialogVisible = false; true }
+                        else -> false
+                    }
                 } else if (state.ignoreDialogVisible) {
+                    val maxSel = if (state.ignoreDialogIsFile) 3 else 2
                     when (event.key) {
                         Key.DirectionUp   -> { if (state.ignoreDialogSelection > 0) state.ignoreDialogSelection--; true }
-                        Key.DirectionDown -> { if (state.ignoreDialogSelection < 2) state.ignoreDialogSelection++; true }
-                        Key.Enter         -> { state.applyCurrentIgnore(IgnoreKind.entries[state.ignoreDialogSelection]); true }
-                        Key.Escape        -> { state.ignoreDialogVisible = false; true }
+                        Key.DirectionDown -> { if (state.ignoreDialogSelection < maxSel) state.ignoreDialogSelection++; true }
+                        Key.Enter         -> {
+                            if (state.ignoreDialogIsFile && state.ignoreDialogSelection == 3) {
+                                state.ignoreDialogVisible = false
+                                state.showIgnoreDirDialog()
+                            } else {
+                                state.applyCurrentIgnore(IgnoreKind.entries[state.ignoreDialogSelection])
+                            }
+                            true
+                        }
+                        Key.Escape -> { state.ignoreDialogVisible = false; true }
                         else -> false
                     }
                 } else if (state.confirmMessage != null) {

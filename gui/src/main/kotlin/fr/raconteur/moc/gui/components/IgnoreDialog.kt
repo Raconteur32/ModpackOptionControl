@@ -8,8 +8,14 @@ import androidx.compose.ui.unit.dp
 import fr.raconteur.moc.gui.IgnoreKind
 
 @Composable
-fun IgnoreDialog(selection: Int, onIgnore: (IgnoreKind) -> Unit, onDismiss: () -> Unit) {
-    val options = listOf(
+fun IgnoreDialog(
+    selection: Int,
+    isFile: Boolean,
+    onIgnore: (IgnoreKind) -> Unit,
+    onIgnoreDir: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val standardOptions = listOf(
         IgnoreKind.Session   to "Until next patch (session)",
         IgnoreKind.Value     to "Until value changes",
         IgnoreKind.Permanent to "Permanently"
@@ -21,7 +27,7 @@ fun IgnoreDialog(selection: Int, onIgnore: (IgnoreKind) -> Unit, onDismiss: () -
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Ignore this entry for how long?")
                 Spacer(Modifier.height(4.dp))
-                options.forEachIndexed { i, (kind, label) ->
+                standardOptions.forEachIndexed { i, (kind, label) ->
                     if (i == selection) {
                         Button(
                             onClick = { onIgnore(kind) },
@@ -32,6 +38,20 @@ fun IgnoreDialog(selection: Int, onIgnore: (IgnoreKind) -> Unit, onDismiss: () -
                             onClick = { onIgnore(kind) },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text(label) }
+                    }
+                }
+                if (isFile) {
+                    val dirIdx = standardOptions.size
+                    if (dirIdx == selection) {
+                        Button(
+                            onClick = onIgnoreDir,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Ignore directory permanently") }
+                    } else {
+                        OutlinedButton(
+                            onClick = onIgnoreDir,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Ignore directory permanently") }
                     }
                 }
             }

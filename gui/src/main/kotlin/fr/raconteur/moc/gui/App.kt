@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import fr.raconteur.moc.gui.components.ConfirmDialog
 import fr.raconteur.moc.gui.components.IgnoreDialog
+import fr.raconteur.moc.gui.components.IgnoreDirDialog
 import fr.raconteur.moc.gui.screens.*
 
 @Composable
@@ -54,9 +55,23 @@ fun App(state: AppState) {
 
             if (state.ignoreDialogVisible) {
                 IgnoreDialog(
-                    selection = state.ignoreDialogSelection,
-                    onIgnore  = { kind -> state.applyCurrentIgnore(kind) },
-                    onDismiss = { state.ignoreDialogVisible = false }
+                    selection  = state.ignoreDialogSelection,
+                    isFile     = state.ignoreDialogIsFile,
+                    onIgnore   = { kind -> state.applyCurrentIgnore(kind) },
+                    onIgnoreDir = {
+                        state.ignoreDialogVisible = false
+                        state.showIgnoreDirDialog()
+                    },
+                    onDismiss  = { state.ignoreDialogVisible = false }
+                )
+            }
+
+            if (state.ignoreDirDialogVisible) {
+                IgnoreDirDialog(
+                    path        = state.ignoreDirDialogPath,
+                    onPathChange = { state.ignoreDirDialogPath = it },
+                    onConfirm   = { state.applyIgnoreDirectory(state.ignoreDirDialogPath) },
+                    onDismiss   = { state.ignoreDirDialogVisible = false }
                 )
             }
         }

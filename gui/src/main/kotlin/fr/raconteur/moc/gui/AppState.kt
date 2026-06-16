@@ -3,6 +3,7 @@ package fr.raconteur.moc.gui
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import fr.raconteur.moc.MocSettings
 import fr.raconteur.moc.filesystem.FileDiffKind
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
@@ -113,10 +114,15 @@ class AppState {
     var valueRawMode   by mutableStateOf(true)
     var ignoreDialogVisible   by mutableStateOf(false)
     var ignoreDialogSelection by mutableStateOf(0)
+    var ignoreDirDialogVisible by mutableStateOf(false)
+    var ignoreDirDialogPath    by mutableStateOf("")
+
+    val ignoreDialogIsFile: Boolean get() = screen is Screen.Files
 
     fun refreshDiff() {
         entries = loadDiff()
         fileIndex = fileIndex.coerceIn(0, (entries.size - 1).coerceAtLeast(0))
+        diffIndex = diffIndex.coerceIn(0, (visibleDiffItems().size - 1).coerceAtLeast(0))
     }
 
     fun refreshDraft() {
@@ -243,7 +249,7 @@ class AppState {
     fun currentOptionDraftEntry(): PatchEntry? {
         val fp      = entries.getOrNull(fileIndex)?.key?.toString() ?: return null
         val visible = visibleDiffItems()
-        if (visible.isEmpty()) return null
+        if (diffIndex >= visible.size) return null
         return draftEntries.find { it.filePath == fp && it.optionPath == visible[diffIndex] }
     }
 
@@ -251,7 +257,7 @@ class AppState {
         if (confirmMessage != null) return
         val filePath = entries.getOrNull(fileIndex)?.key?.toString() ?: return
         val visible  = visibleDiffItems()
-        if (visible.isEmpty()) return
+        if (diffIndex >= visible.size) return
         val selected = visible[diffIndex]
         val fileDiff = entries.getOrNull(fileIndex)?.value ?: return
         val optDiff  = fileDiff.flatContentDiff[selected] ?: return
@@ -274,7 +280,7 @@ class AppState {
         if (confirmMessage != null) return
         val filePath = entries.getOrNull(fileIndex)?.key?.toString() ?: return
         val visible  = visibleDiffItems()
-        if (visible.isEmpty()) return
+        if (diffIndex >= visible.size) return
         DraftPatch.removeEntry(filePath, visible[diffIndex])
         refreshDraft()
     }
@@ -325,6 +331,21 @@ class AppState {
         if (ignoreDialogVisible || confirmMessage != null) return
         ignoreDialogSelection = 0
         ignoreDialogVisible = true
+    }
+
+    fun showIgnoreDirDialog() {
+        val fp = entries.getOrNull(fileIndex)?.key?.toString() ?: return
+        ignoreDirDialogPath    = Path.of(fp).parent?.toString() ?: fp
+        ignoreDirDialogVisible = true
+    }
+
+    fun applyIgnoreDirectory(dir: String) {
+        ignoreDirDialogVisible = false
+        if (dir.isBlank()) return
+        MocSettings.addIgnoredPath(dir.trim())
+        McInstanceMocFileSystem.reload()
+        McInstanceRefMocFileSystem.reload()
+        refreshDiff()
     }
 
     fun applyCurrentIgnore(kind: IgnoreKind) {
