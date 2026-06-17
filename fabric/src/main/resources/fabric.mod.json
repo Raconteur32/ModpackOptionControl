@@ -3,13 +3,14 @@
 	"id": "moc",
 	"version": "${version}",
 	"name": "Modpack Option Control",
-	"description": "This is an example description! Tell everyone what your mod is about!",
+	"description": "An mod allowing atomic option management for modpack makers",
 	"authors": [
-		"Me!"
+		"Raconteur"
 	],
 	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
+		"homepage": "https://modrinth.com/mod/simpleskinswapper",
+		"sources": "https://github.com/Raconteur32/ModpackOptionControl",
+		"issues": "https://github.com/Raconteur32/ModpackOptionControl/issues"
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/moc/icon.png",
