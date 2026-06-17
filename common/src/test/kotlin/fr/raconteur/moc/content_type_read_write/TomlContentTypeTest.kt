@@ -291,4 +291,63 @@ class TomlContentTypeTest {
         assertTrue("{" in written,        "Expected inline table in:\n$written")
         assertTrue("[server]" in written,  "Expected section header in:\n$written")
     }
+
+    // ── Special float values (TOML spec §4) ──────────────────────────────────
+
+    @Test
+    fun `nan is read as a NaN number primitive`() {
+        val file = writeFile("config.toml", "v = nan\n")
+        val p = obj(file).get("v").asJson5Primitive
+        assertTrue(p.isNumber)
+        assertTrue(p.asDouble.isNaN())
+    }
+
+    @Test
+    fun `negative nan is read as NaN`() {
+        val file = writeFile("config.toml", "v = -nan\n")
+        val p = obj(file).get("v").asJson5Primitive
+        assertTrue(p.isNumber)
+        assertTrue(p.asDouble.isNaN())
+    }
+
+    @Test
+    fun `positive infinity is read as a number primitive`() {
+        val file = writeFile("config.toml", "v = inf\n")
+        val p = obj(file).get("v").asJson5Primitive
+        assertTrue(p.isNumber)
+        assertTrue(p.asDouble == Double.POSITIVE_INFINITY)
+    }
+
+    @Test
+    fun `negative infinity is read as a number primitive`() {
+        val file = writeFile("config.toml", "v = -inf\n")
+        val p = obj(file).get("v").asJson5Primitive
+        assertTrue(p.isNumber)
+        assertTrue(p.asDouble == Double.NEGATIVE_INFINITY)
+    }
+
+    @Test
+    fun `round-trip preserves nan value`() {
+        tempDir.resolve("config.toml").toFile().writeText("v = nan\n")
+        val fs1 = MocFileSystem(tempDir)
+        val file1 = fs1.files.first { it.getFileName() == "config.toml" }
+        file1.setContent(file1.getContent()!!)
+
+        val fs2 = MocFileSystem(tempDir)
+        val p = obj(fs2.files.first { it.getFileName() == "config.toml" }).get("v").asJson5Primitive
+        assertTrue(p.asDouble.isNaN())
+    }
+
+    @Test
+    fun `round-trip preserves infinity values`() {
+        tempDir.resolve("config.toml").toFile().writeText("pos = inf\nneg = -inf\n")
+        val fs1 = MocFileSystem(tempDir)
+        val file1 = fs1.files.first { it.getFileName() == "config.toml" }
+        file1.setContent(file1.getContent()!!)
+
+        val fs2 = MocFileSystem(tempDir)
+        val o = obj(fs2.files.first { it.getFileName() == "config.toml" })
+        assertEquals(Double.POSITIVE_INFINITY, o.get("pos").asJson5Primitive.asDouble, 0.0)
+        assertEquals(Double.NEGATIVE_INFINITY, o.get("neg").asJson5Primitive.asDouble, 0.0)
+    }
 }
