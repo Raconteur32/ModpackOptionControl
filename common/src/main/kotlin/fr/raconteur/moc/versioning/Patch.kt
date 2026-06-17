@@ -21,7 +21,7 @@ class Patch(
             } catch (_: Exception) { emptyList() }
 
             val metadata: Map<String, Map<String, String>> = try {
-                gson.fromJson(dir.resolve(".mocmeta.json").toFile().readText(), metaType) ?: emptyMap()
+                gson.fromJson(dir.resolve("mocmeta.json").toFile().readText(), metaType) ?: emptyMap()
             } catch (_: Exception) { emptyMap() }
 
             return Patch(patchName, entries, metadata)

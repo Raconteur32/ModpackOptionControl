@@ -24,8 +24,8 @@ open class MocFileSystem(
     private val ignoredPaths: List<Path> = emptyList()
 ) {
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val metadataJsonFile: Path     = rootPath.resolve(".mocmetadata.json")
-    private val appliedPatchesFile: Path   = rootPath.resolve(".mocappliedpatches.json")
+    private val metadataJsonFile: Path     = rootPath.resolve("mocmetadata.json")
+    private val appliedPatchesFile: Path   = rootPath.resolve("mocappliedpatches.json")
     private val allMetadata: MutableMap<String, MutableMap<String, String>> = loadAllMetadata()
 
     private val _files: MutableMap<Path, MocFile> = mutableMapOf()

@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import fr.raconteur.moc.MocMigration
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.platform.PlatformService
 import fr.raconteur.moc.versioning.PatchMode
@@ -16,6 +17,7 @@ import fr.raconteur.moc.versioning.PatchMode
 fun main(args: Array<String>) {
     PlatformService.INSTANCE = GuiPlatformService
     if (args.isNotEmpty()) GuiPlatformService.gameDirOverride = java.nio.file.Path.of(args[0])
+    MocMigration.migrate()
     McInstanceRefMocFileSystem.regenerateRefFiles()
 
     application {

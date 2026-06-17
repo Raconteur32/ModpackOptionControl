@@ -126,7 +126,7 @@ object DraftPatch {
             gson.fromJson(McInstanceMocFileSystem.getMetadataFile().toFile().readText(), metaType) ?: emptyMap()
         } catch (_: Exception) { emptyMap() }
         val filteredMeta = allMeta.filter { (key, _) -> key in patchFilePaths }
-        dir.resolve(".mocmeta.json").toFile().writeText(gson.toJson(filteredMeta))
+        dir.resolve("mocmeta.json").toFile().writeText(gson.toJson(filteredMeta))
 
         val patch = Patch(patchName, _entries.toList(), filteredMeta)
         PatchList.add(patchName)

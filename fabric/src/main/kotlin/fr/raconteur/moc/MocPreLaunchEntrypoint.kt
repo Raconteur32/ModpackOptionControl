@@ -13,6 +13,7 @@ object MocPreLaunchEntrypoint : PreLaunchEntrypoint {
 
     override fun onPreLaunch() {
         PlatformService.INSTANCE = FabricPlatformService
+        MocMigration.migrate()
 
         val applied = McInstanceMocFileSystem.appliedPatches.toSet()
         val toApply = PatchList.getAll().filter { it !in applied }
