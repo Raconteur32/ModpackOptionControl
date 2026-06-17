@@ -21,7 +21,8 @@ dependencies {
     include("com.jayway.jsonpath:json-path:2.9.0")
     include("de.marhali:json5-java:3.0.0")
     include("com.fasterxml.jackson.dataformat:jackson-dataformat-properties:2.18.3")
-    include("com.fasterxml.jackson.dataformat:jackson-dataformat-toml:2.18.3")
+    include("com.electronwill.night-config:core:3.6.7")
+    include("com.electronwill.night-config:toml:3.6.7")
 }
 
 tasks.processResources {

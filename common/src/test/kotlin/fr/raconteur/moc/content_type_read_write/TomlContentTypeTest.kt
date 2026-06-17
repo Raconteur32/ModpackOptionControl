@@ -239,4 +239,56 @@ class TomlContentTypeTest {
         assertEquals("localhost", db.get("host").asString)
         assertEquals(5432,        db.get("port").asJson5Primitive.asInt)
     }
+
+    // ── Inline / standard format preservation ────────────────────────────────
+
+    @Test
+    fun `inline table path is stored in metadata`() {
+        val file = writeFile("config.toml", "point = {x = 1, y = 2}\n")
+        assertEquals("point", file.metadata["inline_tables"])
+    }
+
+    @Test
+    fun `standard table has no inline_tables metadata`() {
+        val file = writeFile("config.toml", "[database]\nhost = \"localhost\"\n")
+        assertNull(file.metadata["inline_tables"])
+    }
+
+    @Test
+    fun `round-trip preserves inline table format`() {
+        tempDir.resolve("config.toml").toFile().writeText("point = {x = 1, y = 2}\n")
+        val fs1 = MocFileSystem(tempDir)
+        val file1 = fs1.files.first { it.getFileName() == "config.toml" }
+        file1.setContent(file1.getContent()!!)
+
+        val written = tempDir.resolve("config.toml").toFile().readText()
+        assertTrue("{" in written,       "Expected inline table notation in:\n$written")
+        assertFalse("[point]" in written, "Expected no section header for inline table in:\n$written")
+    }
+
+    @Test
+    fun `round-trip preserves standard table format`() {
+        tempDir.resolve("config.toml").toFile().writeText("[database]\nhost = \"localhost\"\n")
+        val fs1 = MocFileSystem(tempDir)
+        val file1 = fs1.files.first { it.getFileName() == "config.toml" }
+        file1.setContent(file1.getContent()!!)
+
+        val written = tempDir.resolve("config.toml").toFile().readText()
+        assertTrue("[database]" in written, "Expected section header in:\n$written")
+        assertFalse("{" in written,         "Expected no inline notation for standard table in:\n$written")
+    }
+
+    @Test
+    fun `round-trip preserves mixed inline and standard tables`() {
+        tempDir.resolve("config.toml").toFile().writeText(
+            "point = {x = 1, y = 2}\n\n[server]\nhost = \"localhost\"\n"
+        )
+        val fs1 = MocFileSystem(tempDir)
+        val file1 = fs1.files.first { it.getFileName() == "config.toml" }
+        file1.setContent(file1.getContent()!!)
+
+        val written = tempDir.resolve("config.toml").toFile().readText()
+        assertTrue("{" in written,        "Expected inline table in:\n$written")
+        assertTrue("[server]" in written,  "Expected section header in:\n$written")
+    }
 }
