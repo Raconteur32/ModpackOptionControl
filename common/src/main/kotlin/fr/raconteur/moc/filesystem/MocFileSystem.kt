@@ -1,6 +1,8 @@
 package fr.raconteur.moc.filesystem
 
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonArray
+import com.google.gson.JsonObject
 import com.google.gson.reflect.TypeToken
 import com.jayway.jsonpath.Configuration
 import com.jayway.jsonpath.DocumentContext
@@ -26,6 +28,7 @@ open class MocFileSystem(
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val metadataJsonFile: Path     = rootPath.resolve("mocmetadata.json")
     private val appliedPatchesFile: Path   = rootPath.resolve("mocappliedpatches.json")
+    private val appliedLogsDir: Path       = rootPath.resolve("mocappliedlogs")
     private val allMetadata: MutableMap<String, MutableMap<String, String>> = loadAllMetadata()
 
     private val _files: MutableMap<Path, MocFile> = mutableMapOf()
@@ -113,6 +116,22 @@ open class MocFileSystem(
 
         _appliedPatches.add(patch.name)
         saveAppliedPatches()
+        writeApplicationLog(patch.name, entriesToApply)
+    }
+
+    private fun writeApplicationLog(patchName: String, entries: List<PatchEntry>) {
+        val array = JsonArray()
+        for (entry in entries) {
+            val obj = JsonObject()
+            obj.addProperty("kind", entry.kind.name.lowercase())
+            obj.addProperty("file", entry.filePath)
+            obj.addProperty("path", entry.optionPath.ifEmpty { "(file)" })
+            obj.add("from", gson.toJsonTree(entry.fromValue))
+            if (entry.kind == EntryKind.VALUE) obj.add("to", gson.toJsonTree(entry.toValue))
+            array.add(obj)
+        }
+        appliedLogsDir.toFile().mkdirs()
+        appliedLogsDir.resolve("applied.$patchName.json5").toFile().writeText(gson.toJson(array))
     }
 
     private fun shouldApply(entry: PatchEntry, forceDelete: Boolean): Boolean =
@@ -188,6 +207,7 @@ open class MocFileSystem(
                 file.isRegularFile()
                     && file != metadataJsonFile
                     && file != appliedPatchesFile
+                    && !file.startsWith(appliedLogsDir)
                     && ignoredPaths.none { file.startsWith(rootPath.resolve(it)) }
                     && !MocFile.isBinary(file)
             }

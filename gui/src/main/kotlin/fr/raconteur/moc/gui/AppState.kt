@@ -7,6 +7,7 @@ import fr.raconteur.moc.MocSettings
 import fr.raconteur.moc.filesystem.FileDiffKind
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
+import fr.raconteur.moc.filesystem.MocFileDiff
 import fr.raconteur.moc.filesystem.applyDiffToDraft
 import fr.raconteur.moc.filesystem.directChildren
 import fr.raconteur.moc.filesystem.isDescendant
@@ -105,6 +106,13 @@ class AppState {
     var draftIndex   by mutableStateOf(0)
     var ignoreIndex  by mutableStateOf(0)
     var pathStack    by mutableStateOf(listOf("$"))
+
+    private var _ignoreSearch by mutableStateOf("")
+    var ignoreSearch: String
+        get() = _ignoreSearch
+        set(value) { _ignoreSearch = value; ignoreIndex = 0 }
+
+    var ignoreSearchFocused: Boolean = false
     var valuePath    by mutableStateOf<String?>(null)
     var patchName    by mutableStateOf("")
     var patchNameError by mutableStateOf<String?>(null)
@@ -121,6 +129,7 @@ class AppState {
 
     fun refreshDiff() {
         entries = loadDiff()
+        refreshIgnore()
         fileIndex = fileIndex.coerceIn(0, (entries.size - 1).coerceAtLeast(0))
         diffIndex = diffIndex.coerceIn(0, (visibleDiffItems().size - 1).coerceAtLeast(0))
     }
@@ -138,11 +147,16 @@ class AppState {
         ignoreIndex = ignoreIndex.coerceIn(0, (n - 1).coerceAtLeast(0))
     }
 
-    fun currentIgnoreEntries(): List<IgnoreEntry> = when (screen) {
-        is Screen.IgnoreSession   -> ignoreSessionEntries
-        is Screen.IgnoreValue     -> ignoreValueEntries
-        is Screen.IgnorePermanent -> ignorePermanentEntries
-        else                      -> emptyList()
+    fun currentIgnoreEntries(): List<IgnoreEntry> {
+        val raw = when (screen) {
+            is Screen.IgnoreSession   -> ignoreSessionEntries
+            is Screen.IgnoreValue     -> ignoreValueEntries
+            is Screen.IgnorePermanent -> ignorePermanentEntries
+            else                      -> return emptyList()
+        }
+        if (_ignoreSearch.isBlank()) return raw
+        val q = _ignoreSearch.lowercase()
+        return raw.filter { it.filePath.lowercase().contains(q) || it.optionPath.lowercase().contains(q) }
     }
 
     fun currentFilePath(): Path? = entries.getOrNull(fileIndex)?.key
@@ -192,8 +206,10 @@ class AppState {
             is Screen.Value    -> screen = s.returnTo
             is Screen.Draft    -> screen = Screen.Files
             is Screen.Finalize -> { patchName = ""; screen = Screen.Files }
-            is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent ->
+            is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent -> {
+                ignoreSearch = ""
                 screen = Screen.Files
+            }
             else -> {}
         }
     }
@@ -238,12 +254,19 @@ class AppState {
     // ── Option-level actions (DiffScreen) ─────────────────────────────────
 
     fun visibleDiffItems(): List<String> {
-        val fileDiff = entries.getOrNull(fileIndex)?.value ?: return emptyList()
-        val fp       = entries.getOrNull(fileIndex)?.key?.toString() ?: return emptyList()
-        val allPaths = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
-        return directChildren(allPaths, pathStack.last()).filter { path ->
-            !IgnoreStore.isIgnored(fp, path, fileDiff.flatContentDiff[path]?.newValue)
+        val fileDiff        = entries.getOrNull(fileIndex)?.value ?: return emptyList()
+        val fp              = entries.getOrNull(fileIndex)?.key?.toString() ?: return emptyList()
+        val allNonRootPaths = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
+        return directChildren(allNonRootPaths, pathStack.last()).filter { path ->
+            !isEffectivelyHidden(fp, path, fileDiff, allNonRootPaths)
         }
+    }
+
+    private fun isEffectivelyHidden(fp: String, path: String, fileDiff: MocFileDiff, allNonRootPaths: List<String>): Boolean {
+        if (IgnoreStore.isIgnored(fp, path, fileDiff.flatContentDiff[path]?.newValue)) return true
+        val children = directChildren(allNonRootPaths, path)
+        if (children.isEmpty()) return false
+        return children.all { isEffectivelyHidden(fp, it, fileDiff, allNonRootPaths) }
     }
 
     fun currentOptionDraftEntry(): PatchEntry? {
@@ -417,12 +440,28 @@ class AppState {
         }
     }
 
-    private fun loadDiff() =
-        McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem).entries
+    private fun loadDiff(): List<Map.Entry<Path, MocFileDiff>> {
+        val rawDiff = McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem)
+
+        // Invalidate value ignores whose target value no longer matches the current diff
+        val stale = IgnoreStore.valueIgnores.filter { ignore ->
+            val fileDiff = rawDiff[Path.of(ignore.filePath)] ?: return@filter false
+            val optDiff  = fileDiff.flatContentDiff[ignore.optionPath] ?: return@filter false
+            optDiff.newValue?.toString() != ignore.targetValue
+        }
+        stale.forEach { IgnoreStore.remove(it.filePath, it.optionPath, IgnoreKind.Value) }
+
+        return rawDiff.entries
             .sortedBy { it.key.toString() }
             .filter { (path, fileDiff) ->
-                val fp       = path.toString()
-                val rootPath = if (fileDiff.kind == FileDiffKind.DELETED) "" else "$"
-                !IgnoreStore.isIgnored(fp, rootPath, fileDiff.flatContentDiff[rootPath]?.newValue)
+                val fp = path.toString()
+                if (fileDiff.kind == FileDiffKind.DELETED)
+                    return@filter !IgnoreStore.isIgnored(fp, "", fileDiff.flatContentDiff[""]?.newValue)
+                if (IgnoreStore.isIgnored(fp, "$", fileDiff.flatContentDiff["$"]?.newValue))
+                    return@filter false
+                val allNonRootPaths = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
+                val topLevel = directChildren(allNonRootPaths, "$")
+                topLevel.isEmpty() || topLevel.any { !isEffectivelyHidden(fp, it, fileDiff, allNonRootPaths) }
             }
+    }
 }

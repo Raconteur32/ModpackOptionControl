@@ -29,8 +29,8 @@ class MocFile private constructor(
     val contentType: ContentType
         get() = metadata["content"]?.let { ContentTypeRegistry.findById(it) } ?: TextContentType
 
-    fun initContentTypeSpecificMetadata() {
-        metadata.putAll(contentType.getSpecificMetadata(this))
+    fun ensureContentTypeSpecificMetadata() {
+        contentType.getSpecificMetadata(this).forEach { (k, v) -> metadata.putIfAbsent(k, v) }
     }
 
     companion object {
@@ -44,7 +44,7 @@ class MocFile private constructor(
                 meta["content"] = inferContentType(probe).id
             }
             val file = MocFile(fileSystem, relativePath, exists = true, metadata = meta)
-            file.initContentTypeSpecificMetadata()
+            file.ensureContentTypeSpecificMetadata()
             fileSystem.register(file)
             return file
         }
@@ -58,7 +58,7 @@ class MocFile private constructor(
             val meta = metadata.toMutableMap().also { it["content"] = contentTypeId }
             val exists = fileSystem.getRootPath().resolve(relativePath).toFile().exists()
             val file = MocFile(fileSystem, relativePath, exists, meta)
-            file.initContentTypeSpecificMetadata()
+            file.ensureContentTypeSpecificMetadata()
             fileSystem.register(file)
             return file
         }
@@ -72,7 +72,7 @@ class MocFile private constructor(
             val meta = metadata.toMutableMap().also { it["content"] = contentTypeId }
             val exists = fileSystem.getRootPath().resolve(relativePath).toFile().exists()
             val file = MocFile(fileSystem, relativePath, exists, meta)
-            file.initContentTypeSpecificMetadata()
+            file.ensureContentTypeSpecificMetadata()
             return file
         }
 

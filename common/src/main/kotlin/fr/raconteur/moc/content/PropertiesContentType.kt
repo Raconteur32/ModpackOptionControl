@@ -23,46 +23,65 @@ object PropertiesContentType : ContentType() {
     override fun hasValidContent(file: MocFile): Boolean {
         val text = file.getStringContent() ?: return false
         if (text.isBlank()) return false
-        return try { readFlat(text); true } catch (_: Exception) { false }
+        return try { readOrdered(text); true } catch (_: Exception) { false }
     }
 
     override fun getContent(file: MocFile): Json5Element? {
         val text = file.getStringContent() ?: return null
         return try {
             Json5Object().also { obj ->
-                for ((key, value) in readFlat(text)) obj.add(key, Json5Primitive.fromString(value))
+                for ((key, value) in readOrdered(text)) obj.add(key, Json5Primitive.fromString(value))
             }
         } catch (_: Exception) { null }
     }
 
     override fun setContent(file: MocFile, content: Json5Element) {
         val separator = file.metadata["separator"] ?: "="
-        val lines = mutableListOf<String>()
-        if (content.isJson5Object) {
-            for ((key, value) in content.asJson5Object.entrySet()) {
-                val valueStr = when {
-                    value.isJson5Object || value.isJson5Array -> json5Writer.serialize(value)
-                    value.isJson5Primitive                    -> value.asJson5Primitive.asString
-                    else                                      -> value.toString()
-                }
-                lines.add(if (separator == " ") "$key $valueStr" else "$key$separator$valueStr")
+        val keyOrder  = file.metadata["key_order"]
+            ?.split(",")?.filter { it.isNotEmpty() } ?: emptyList()
+
+        if (!content.isJson5Object) return
+        val obj = content.asJson5Object
+
+        val contentKeys = obj.keySet()
+        val baseOrder = keyOrder.filter { it in contentKeys } +
+                        contentKeys.filter { it !in keyOrder }
+        val versionOnTop = file.metadata["version_always_on_top"] == "true"
+        val orderedKeys = if (versionOnTop && "version" in contentKeys)
+            listOf("version") + baseOrder.filter { it != "version" }
+        else
+            baseOrder
+
+        val lines = orderedKeys.map { key ->
+            val value = obj.get(key)
+            val valueStr = when {
+                value.isJson5Object || value.isJson5Array -> json5Writer.serialize(value)
+                value.isJson5Primitive                    -> value.asJson5Primitive.asString
+                else                                      -> value.toString()
             }
+            "$key$separator$valueStr"
         }
         file.setStringContent(lines.joinToString(System.lineSeparator()))
     }
 
-    override fun getSpecificMetadata(file: MocFile): Map<String, String> =
-        mapOf("separator" to detectSeparator(file))
+    override fun getSpecificMetadata(file: MocFile): Map<String, String> {
+        val text = file.getStringContent() ?: return emptyMap()
+        if (text.isBlank()) return emptyMap()
+        val keys = readOrdered(text).keys.toList()
+        return buildMap {
+            put("separator", detectSeparator(text))
+            put("version_always_on_top", "true")
+            if (keys.isNotEmpty()) put("key_order", keys.joinToString(","))
+        }
+    }
 
-    private fun readFlat(text: String): Map<String, String> {
-        val props = Properties()
+    private fun readOrdered(text: String): Map<String, String> {
+        val props = OrderedProperties()
         props.load(StringReader(text))
         return props.stringPropertyNames().associateWith { props.getProperty(it) }
     }
 
-    private fun detectSeparator(file: MocFile): String {
-        val text = file.getStringContent() ?: return "="
-        if (text.isBlank()) return "="
+    private fun detectSeparator(text: String): String {
         for (line in text.lines()) {
             val trimmed = line.trimStart()
             if (trimmed.isBlank() || trimmed.startsWith('#') || trimmed.startsWith('!')) continue
@@ -71,5 +90,17 @@ object PropertiesContentType : ContentType() {
             return if (sep == ' ' || sep == '\t') " " else sep.toString()
         }
         return "="
+    }
+
+    private class OrderedProperties : Properties() {
+        private val orderedKeys = LinkedHashSet<Any>()
+
+        override fun put(key: Any, value: Any): Any? {
+            orderedKeys.add(key)
+            return super.put(key, value)
+        }
+
+        override fun stringPropertyNames(): Set<String> =
+            orderedKeys.filterIsInstance<String>().toCollection(LinkedHashSet())
     }
 }

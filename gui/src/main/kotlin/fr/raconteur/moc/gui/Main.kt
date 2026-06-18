@@ -18,6 +18,7 @@ fun main(args: Array<String>) {
     PlatformService.INSTANCE = GuiPlatformService
     if (args.isNotEmpty()) GuiPlatformService.gameDirOverride = java.nio.file.Path.of(args[0])
     MocMigration.migrate()
+    IgnoreStore.pruneRedundant()
     McInstanceRefMocFileSystem.regenerateRefFiles()
 
     application {
@@ -107,13 +108,20 @@ fun main(args: Array<String>) {
                         Key.I                         -> { state.showIgnoreDialog();                    true }
                         else -> false
                     }
-                    is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent -> when (event.key) {
-                        Key.DirectionUp               -> { state.moveUp();                    true }
-                        Key.DirectionDown             -> { state.moveDown();                  true }
-                        Key.Escape                    -> { state.goBack();                    true }
-                        Key.R                         -> { state.removeCurrentIgnoreEntry();  true }
-                        else -> false
-                    }
+                    is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent ->
+                        if (state.ignoreSearchFocused) when (event.key) {
+                            Key.Escape -> {
+                                if (state.ignoreSearch.isNotEmpty()) { state.ignoreSearch = ""; true }
+                                else { state.goBack(); true }
+                            }
+                            else -> false
+                        } else when (event.key) {
+                            Key.DirectionUp               -> { state.moveUp();                    true }
+                            Key.DirectionDown             -> { state.moveDown();                  true }
+                            Key.Escape                    -> { state.goBack();                    true }
+                            Key.R                         -> { state.removeCurrentIgnoreEntry();  true }
+                            else -> false
+                        }
                     else -> false
                 }
             }

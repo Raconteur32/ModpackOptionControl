@@ -2,6 +2,8 @@ package fr.raconteur.moc.gui
 
 import com.google.gson.GsonBuilder
 import com.google.gson.annotations.SerializedName
+import fr.raconteur.moc.MocSettings
+import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.platform.PlatformService
 import java.nio.file.Path
 
@@ -48,6 +50,38 @@ object IgnoreStore {
     }
 
     fun resetSession() { _sessionIgnores.clear(); save() }
+
+    fun pruneRedundant() {
+        val ignoredDirs = MocSettings.ignoredPaths
+
+        fun isUnderIgnoredDir(e: IgnoreEntry) =
+            ignoredDirs.any { dir -> Path.of(e.filePath).startsWith(dir) }
+
+        fun isCoveredByPermanent(e: IgnoreEntry) =
+            _permanentIgnores.any { p -> p.filePath == e.filePath && isDescendant(e.optionPath, p.optionPath) }
+
+        fun isCoveredBySessionOrValue(e: IgnoreEntry) =
+            (_sessionIgnores + _valueIgnores).any { p -> p.filePath == e.filePath && isDescendant(e.optionPath, p.optionPath) }
+
+        fun MutableList<IgnoreEntry>.prune(predicate: (IgnoreEntry) -> Boolean): Boolean {
+            val before = size; removeIf(predicate); return size != before
+        }
+
+        var changed = false
+        // R1: under a filesystem-ignored directory
+        changed = _sessionIgnores.prune   { isUnderIgnoredDir(it) } or changed
+        changed = _valueIgnores.prune     { isUnderIgnoredDir(it) } or changed
+        changed = _permanentIgnores.prune { isUnderIgnoredDir(it) } or changed
+        // R2: permanent parent covers all 3 kinds
+        changed = _sessionIgnores.prune   { isCoveredByPermanent(it) } or changed
+        changed = _valueIgnores.prune     { isCoveredByPermanent(it) } or changed
+        changed = _permanentIgnores.prune { isCoveredByPermanent(it) } or changed
+        // R3: session/value parent covers session + value
+        changed = _sessionIgnores.prune { isCoveredBySessionOrValue(it) } or changed
+        changed = _valueIgnores.prune   { isCoveredBySessionOrValue(it) } or changed
+
+        if (changed) save()
+    }
 
     fun isIgnored(filePath: String, optionPath: String, newValue: Any?): Boolean {
         if (_sessionIgnores.any   { it.filePath == filePath && it.optionPath == optionPath }) return true

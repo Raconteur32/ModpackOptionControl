@@ -38,9 +38,9 @@ fun App(state: AppState) {
                         is Screen.Value          -> ValueScreen(state, screen.returnTo)
                         is Screen.Draft          -> DraftScreen(state)
                         is Screen.Finalize       -> FinalizeScreen(state)
-                        is Screen.IgnoreSession  -> IgnoreScreen(state, IgnoreKind.Session,   state.ignoreSessionEntries)
-                        is Screen.IgnoreValue    -> IgnoreScreen(state, IgnoreKind.Value,     state.ignoreValueEntries)
-                        is Screen.IgnorePermanent -> IgnoreScreen(state, IgnoreKind.Permanent, state.ignorePermanentEntries)
+                        is Screen.IgnoreSession  -> IgnoreScreen(state, IgnoreKind.Session,   state.currentIgnoreEntries())
+                        is Screen.IgnoreValue    -> IgnoreScreen(state, IgnoreKind.Value,     state.currentIgnoreEntries())
+                        is Screen.IgnorePermanent -> IgnoreScreen(state, IgnoreKind.Permanent, state.currentIgnoreEntries())
                     }
                 }
             }

@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -33,6 +34,16 @@ fun IgnoreScreen(state: AppState, kind: IgnoreKind, entries: List<IgnoreEntry>) 
         IgnoreKind.Value     -> "Lifted when the target value changes"
         IgnoreKind.Permanent -> "Ignored indefinitely"
     }
+    val totalCount = when (kind) {
+        IgnoreKind.Session   -> state.ignoreSessionEntries.size
+        IgnoreKind.Value     -> state.ignoreValueEntries.size
+        IgnoreKind.Permanent -> state.ignorePermanentEntries.size
+    }
+    val countText = if (state.ignoreSearch.isBlank()) {
+        "${entries.size} entr${if (entries.size != 1) "ies" else "y"}"
+    } else {
+        "${entries.size} / $totalCount entr${if (totalCount != 1) "ies" else "y"}"
+    }
 
     LaunchedEffect(state.ignoreIndex) {
         if (entries.isNotEmpty())
@@ -43,13 +54,25 @@ fun IgnoreScreen(state: AppState, kind: IgnoreKind, entries: List<IgnoreEntry>) 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(Modifier.width(12.dp))
-            Text("${entries.size} entr${if (entries.size != 1) "ies" else "y"} — $subtitle",
-                color = Color.Gray, fontSize = 13.sp)
+            Text("$countText — $subtitle", color = Color.Gray, fontSize = 13.sp)
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = state.ignoreSearch,
+            onValueChange = { state.ignoreSearch = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { state.ignoreSearchFocused = it.isFocused },
+            placeholder = { Text("Search by file or option…", fontSize = 13.sp) },
+            singleLine = true
+        )
+        Spacer(Modifier.height(8.dp))
 
         if (entries.isEmpty()) {
-            Text("No ignored entries.", color = Color.Gray, modifier = Modifier.padding(8.dp))
+            Text(
+                if (state.ignoreSearch.isBlank()) "No ignored entries." else "No entries match the search.",
+                color = Color.Gray, modifier = Modifier.padding(8.dp)
+            )
             Spacer(Modifier.weight(1f))
         } else {
             LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
