@@ -20,7 +20,8 @@ import fr.raconteur.moc.versioning.PatchMode
 
 @Composable
 fun RecompValueScreen(state: PatchesState, returnTo: Screen) {
-    val (filePath, fileDiff) = state.recompEntries[state.recompFileIndex]
+    val entry = state.recompEntries.getOrNull(state.recompFileIndex) ?: return
+    val (filePath, fileDiff) = entry
     val vp      = state.recompValuePath ?: return
     val optDiff = fileDiff.flatContentDiff[vp]
     val inDraft = state.recompDraftEntries.find { it.filePath == filePath.toString() && it.optionPath == vp }

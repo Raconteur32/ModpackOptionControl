@@ -28,7 +28,8 @@ import fr.raconteur.moc.versioning.PatchMode
 
 @Composable
 fun RecompDiffScreen(state: PatchesState) {
-    val (filePath, fileDiff) = state.recompEntries[state.recompFileIndex]
+    val entry = state.recompEntries.getOrNull(state.recompFileIndex) ?: return
+    val (filePath, fileDiff) = entry
     val filePathStr  = filePath.toString()
     val allPaths     = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
     val visible      = state.recompVisibleDiffItems()

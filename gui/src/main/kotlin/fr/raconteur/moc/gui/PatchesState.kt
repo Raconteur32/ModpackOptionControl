@@ -71,6 +71,13 @@ class PatchesState {
         view               = PatchesView.Recomposition
     }
 
+    fun refreshRecompEntries() {
+        recompEntries   = RecompositionDraft.cachedDiff
+        recompFileIndex = recompFileIndex.coerceIn(0, (recompEntries.size - 1).coerceAtLeast(0))
+        if (recompEntries.isEmpty()) recompScreen = Screen.Files
+        recompDiffIndex = recompDiffIndex.coerceIn(0, (recompVisibleDiffItems().size - 1).coerceAtLeast(0))
+    }
+
     fun resumeRecomposition() {
         recompEntries      = RecompositionDraft.cachedDiff
         recompDraftEntries = RecompositionDraft.entries.toList()
