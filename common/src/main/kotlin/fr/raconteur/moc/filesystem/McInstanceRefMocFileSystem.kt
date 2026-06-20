@@ -5,8 +5,10 @@ import fr.raconteur.moc.platform.PlatformService
 import fr.raconteur.moc.versioning.PatchList
 
 object McInstanceRefMocFileSystem : MocFileSystem(
-    rootPath = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/ref"),
-    ignoredPaths = MocSettings.ignoredPaths
+    rootPath     = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/ref"),
+    ignoredPaths = MocSettings.ignoredPaths,
+    hasRef       = true,
+    onRefError   = { patchName, e -> PlatformService.INSTANCE.logError("[moc] Failed to rebuild ref for patch '$patchName': ${e.message}", e) }
 ) {
     fun regenerateRefFiles() {
         getRootPath().toFile().walkTopDown()

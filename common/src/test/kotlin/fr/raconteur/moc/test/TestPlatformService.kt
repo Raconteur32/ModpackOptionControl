@@ -9,6 +9,9 @@ class TestPlatformService private constructor(val tempDir: Path) : PlatformServi
     override fun getPlatformName() = "Test"
     override fun getGameDir(): Path = tempDir
     override fun getConfigDir(): Path = tempDir.resolve("config")
+    override fun logInfo(message: String) = println("[MOC-TEST] $message")
+    override fun logError(message: String, e: Exception?) { System.err.println("[MOC-TEST][ERROR] $message"); e?.printStackTrace(System.err) }
+    override fun logCritical(message: String, e: Exception?) { System.err.println("[MOC-TEST][CRITICAL] $message"); e?.printStackTrace(System.err) }
 
     fun installAsPlatformService() {
         PlatformService.INSTANCE = this
