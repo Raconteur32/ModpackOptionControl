@@ -11,6 +11,7 @@ import fr.raconteur.moc.content.FlatContent
 import fr.raconteur.moc.content.FlatContentDiff
 import fr.raconteur.moc.content.PropertiesContentType
 import fr.raconteur.moc.content.TextContentType
+import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import java.nio.charset.CodingErrorAction
@@ -153,8 +154,14 @@ class MocFile private constructor(
     }
 
     fun setStringContent(text: String) {
-        getAbsolutePath().toFile().parentFile?.mkdirs()
-        getAbsolutePath().toFile().writeText(text, Charset.forName(encoding))
+        val absPath = getAbsolutePath()
+        absPath.toFile().parentFile?.mkdirs()
+        val bytes = text.toByteArray(Charset.forName(encoding))
+        FileOutputStream(absPath.toFile()).use { fos ->
+            fos.write(bytes)
+            fos.flush()
+            fos.fd.sync()
+        }
         exists = true
     }
 

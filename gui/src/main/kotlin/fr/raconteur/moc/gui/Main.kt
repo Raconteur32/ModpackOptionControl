@@ -10,8 +10,11 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import fr.raconteur.moc.MocMigration
+import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.platform.PlatformService
+import fr.raconteur.moc.versioning.Patch
+import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.PatchMode
 
 fun main(args: Array<String>) {
@@ -19,6 +22,13 @@ fun main(args: Array<String>) {
     if (args.isNotEmpty()) GuiPlatformService.gameDirOverride = java.nio.file.Path.of(args[0])
     MocMigration.migrate()
     IgnoreStore.pruneRedundant()
+
+    val applied = McInstanceMocFileSystem.appliedPatches.toSet()
+    val toApply = PatchList.getAll().filter { it !in applied }
+    for (patchName in toApply) {
+        McInstanceMocFileSystem.applyPatch(Patch.load(patchName), forceDelete = false)
+    }
+
     McInstanceRefMocFileSystem.regenerateRefFiles()
 
     application {
