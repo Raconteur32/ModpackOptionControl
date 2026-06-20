@@ -197,20 +197,19 @@ open class MocFileSystem(
     }
 
     private fun splitLastSegment(path: String): Pair<String, String>? {
-        val lastBracket = path.lastIndexOf('[')
-        val lastDot = path.lastIndexOf('.')
-        return when {
-            lastBracket > lastDot && lastBracket > 0 -> {
-                val parent = path.substring(0, lastBracket)
-                val key = path.substring(lastBracket + 1, path.length - 1).trim('\'', '"')
-                if (parent.isNotEmpty()) parent to key else null
-            }
-            lastDot > 0 -> {
-                val parent = path.substring(0, lastDot)
-                val key = path.substring(lastDot + 1)
-                if (parent.isNotEmpty()) parent to key else null
-            }
-            else -> null
+        return if (path.endsWith("]")) {
+            val lastBracket = path.lastIndexOf('[')
+            if (lastBracket <= 0) return null
+            val parent = path.substring(0, lastBracket)
+            val key = path.substring(lastBracket + 1, path.length - 1).trim('\'', '"')
+                .replace("\\'", "'").replace("\\\\", "\\")
+            if (parent.isNotEmpty()) parent to key else null
+        } else {
+            val lastDot = path.lastIndexOf('.')
+            if (lastDot <= 0) return null
+            val parent = path.substring(0, lastDot)
+            val key = path.substring(lastDot + 1)
+            if (parent.isNotEmpty()) parent to key else null
         }
     }
 

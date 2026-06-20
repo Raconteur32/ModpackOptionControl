@@ -34,7 +34,7 @@ abstract class ContentType {
         out[path] = element
         when {
             element.isJson5Object -> for ((key, value) in element.asJson5Object.entrySet())
-                flattenInto("$path['$key']", value, out)
+                flattenInto("$path['${key.replace("\\", "\\\\").replace("'", "\\'")}']", value, out)
             element.isJson5Array -> {
                 val arr = element.asJson5Array
                 for (i in 0 until arr.size())
