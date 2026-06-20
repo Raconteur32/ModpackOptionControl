@@ -71,15 +71,28 @@ class PatchesState {
         view               = PatchesView.Recomposition
     }
 
-    fun refreshRecompEntries() {
-        recompEntries   = RecompositionDraft.cachedDiff
+    private fun refreshRecompEntries() {
+        val all     = RecompositionDraft.cachedDiff
+        val ignores = recompIgnores
+        recompEntries = all.filter { (path, fileDiff) ->
+            val fp = path.toString()
+            when {
+                fileDiff.kind == FileDiffKind.DELETED ->
+                    ignores.none { it.filePath == fp && it.optionPath == "" }
+                ignores.any { it.filePath == fp && it.optionPath == "$" } -> false
+                else -> {
+                    val allNonRoot = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
+                    val topLevel   = directChildren(allNonRoot, "$")
+                    topLevel.isEmpty() || topLevel.any { !isRecompEffectivelyHidden(fp, it, fileDiff, allNonRoot, ignores) }
+                }
+            }
+        }
         recompFileIndex = recompFileIndex.coerceIn(0, (recompEntries.size - 1).coerceAtLeast(0))
         if (recompEntries.isEmpty()) recompScreen = Screen.Files
         recompDiffIndex = recompDiffIndex.coerceIn(0, (recompVisibleDiffItems().size - 1).coerceAtLeast(0))
     }
 
     fun resumeRecomposition() {
-        recompEntries      = RecompositionDraft.cachedDiff
         recompDraftEntries = RecompositionDraft.entries.toList()
         recompIgnores      = IgnoreStore.recompositionIgnores
         recompScreen       = Screen.Files
@@ -90,6 +103,7 @@ class PatchesState {
         recompPathStack    = listOf("$")
         recompFocusedPanel = RecompFocusedPanel.Changes
         view               = PatchesView.Recomposition
+        refreshRecompEntries()
     }
 
     // ── Recomposition editor state ────────────────────────────────────────────
@@ -329,12 +343,14 @@ class PatchesState {
     fun recompAddIgnore(filePath: String, optionPath: String) {
         IgnoreStore.addRecomp(IgnoreEntry(filePath, optionPath))
         refreshRecompIgnores()
+        refreshRecompEntries()
     }
 
     fun recompRemoveCurrentIgnore() {
         val entry = recompIgnores.getOrNull(recompIgnoreIndex) ?: return
         IgnoreStore.removeRecomp(entry.filePath, entry.optionPath)
         refreshRecompIgnores()
+        refreshRecompEntries()
     }
 
     // ── Private navigation ────────────────────────────────────────────────────
