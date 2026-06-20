@@ -91,6 +91,7 @@ class AppState {
         entries = loadDiff()
         refreshIgnore()
         fileIndex = fileIndex.coerceIn(0, (entries.size - 1).coerceAtLeast(0))
+        if (entries.isEmpty()) screen = Screen.Files
         diffIndex = diffIndex.coerceIn(0, (visibleDiffItems().size - 1).coerceAtLeast(0))
     }
 

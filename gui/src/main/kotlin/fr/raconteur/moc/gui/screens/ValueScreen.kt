@@ -20,7 +20,8 @@ import fr.raconteur.moc.versioning.PatchMode
 
 @Composable
 fun ValueScreen(state: AppState, returnTo: Screen) {
-    val (filePath, fileDiff) = state.entries[state.fileIndex]
+    val entry = state.entries.getOrNull(state.fileIndex) ?: return
+    val (filePath, fileDiff) = entry
     val vp      = state.valuePath ?: return
     val optDiff = fileDiff.flatContentDiff[vp]
     val inDraft = state.draftEntries.find { it.filePath == filePath.toString() && it.optionPath == vp }

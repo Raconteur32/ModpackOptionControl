@@ -34,7 +34,8 @@ private fun hasSubDraft(draftEntries: List<PatchEntry>, filePath: String, parent
 
 @Composable
 fun DiffScreen(state: AppState) {
-    val (filePath, fileDiff) = state.entries[state.fileIndex]
+    val entry = state.entries.getOrNull(state.fileIndex) ?: return
+    val (filePath, fileDiff) = entry
     val filePathStr  = filePath.toString()
     val allPaths     = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
     val visible      = state.visibleDiffItems()
