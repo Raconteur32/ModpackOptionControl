@@ -17,6 +17,8 @@ import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.PatchMode
 import java.nio.file.Path
 
+enum class AppTab(val label: String) { NewPatch("New Patch"), Patches("Patches") }
+
 sealed class Screen {
     object Files : Screen()
     object Diff  : Screen()
@@ -34,6 +36,9 @@ enum class IgnoreFilter(val label: String) {
 enum class FocusedPanel { Changes, Draft, Ignores }
 
 class AppState {
+    var activeTab    by mutableStateOf(AppTab.NewPatch)
+    val patchesState  = PatchesState()
+
     var entries      by mutableStateOf(loadDiff())
     var draftEntries by mutableStateOf<List<PatchEntry>>(DraftPatch.entries.toList())
 

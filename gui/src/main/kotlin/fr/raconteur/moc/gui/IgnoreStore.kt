@@ -16,9 +16,10 @@ data class IgnoreEntry(
 )
 
 private data class EditorData(
-    @SerializedName("session_ignores")   val sessionIgnores: List<IgnoreEntry> = emptyList(),
-    @SerializedName("value_ignores")     val valueIgnores: List<IgnoreEntry> = emptyList(),
-    @SerializedName("permanent_ignores") val permanentIgnores: List<IgnoreEntry> = emptyList()
+    @SerializedName("session_ignores")       val sessionIgnores: List<IgnoreEntry> = emptyList(),
+    @SerializedName("value_ignores")         val valueIgnores: List<IgnoreEntry> = emptyList(),
+    @SerializedName("permanent_ignores")     val permanentIgnores: List<IgnoreEntry> = emptyList(),
+    @SerializedName("recomposition_ignores") val recompositionIgnores: List<IgnoreEntry> = emptyList()
 )
 
 object IgnoreStore {
@@ -26,13 +27,15 @@ object IgnoreStore {
     private val editorPath: Path
         get() = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/editor.json")
 
-    private val _sessionIgnores   = mutableListOf<IgnoreEntry>()
-    private val _valueIgnores     = mutableListOf<IgnoreEntry>()
-    private val _permanentIgnores = mutableListOf<IgnoreEntry>()
+    private val _sessionIgnores       = mutableListOf<IgnoreEntry>()
+    private val _valueIgnores         = mutableListOf<IgnoreEntry>()
+    private val _permanentIgnores     = mutableListOf<IgnoreEntry>()
+    private val _recompositionIgnores = mutableListOf<IgnoreEntry>()
 
-    val sessionIgnores:   List<IgnoreEntry> get() = _sessionIgnores.toList()
-    val valueIgnores:     List<IgnoreEntry> get() = _valueIgnores.toList()
-    val permanentIgnores: List<IgnoreEntry> get() = _permanentIgnores.toList()
+    val sessionIgnores:       List<IgnoreEntry> get() = _sessionIgnores.toList()
+    val valueIgnores:         List<IgnoreEntry> get() = _valueIgnores.toList()
+    val permanentIgnores:     List<IgnoreEntry> get() = _permanentIgnores.toList()
+    val recompositionIgnores: List<IgnoreEntry> get() = _recompositionIgnores.toList()
 
     init { load() }
 
@@ -50,6 +53,22 @@ object IgnoreStore {
     }
 
     fun resetSession() { _sessionIgnores.clear(); save() }
+
+    fun addRecomp(entry: IgnoreEntry) {
+        _recompositionIgnores.removeIf { it.filePath == entry.filePath && it.optionPath == entry.optionPath }
+        _recompositionIgnores.add(entry)
+        save()
+    }
+
+    fun removeRecomp(filePath: String, optionPath: String) {
+        _recompositionIgnores.removeIf { it.filePath == filePath && it.optionPath == optionPath }
+        save()
+    }
+
+    fun clearRecompIgnores() { _recompositionIgnores.clear(); save() }
+
+    fun isIgnoredForRecomp(filePath: String, optionPath: String): Boolean =
+        _recompositionIgnores.any { it.filePath == filePath && it.optionPath == optionPath }
 
     fun pruneRedundant() {
         val ignoredDirs = MocSettings.ignoredPaths
@@ -101,14 +120,20 @@ object IgnoreStore {
         val file = editorPath.toFile()
         if (!file.exists()) return
         val data = try { gson.fromJson(file.readText(), EditorData::class.java) } catch (_: Exception) { return }
-        data?.sessionIgnores?.forEach   { _sessionIgnores.add(it) }
-        data?.valueIgnores?.forEach     { _valueIgnores.add(it) }
-        data?.permanentIgnores?.forEach { _permanentIgnores.add(it) }
+        data?.sessionIgnores?.forEach       { _sessionIgnores.add(it) }
+        data?.valueIgnores?.forEach         { _valueIgnores.add(it) }
+        data?.permanentIgnores?.forEach     { _permanentIgnores.add(it) }
+        data?.recompositionIgnores?.forEach { _recompositionIgnores.add(it) }
     }
 
     private fun save() {
         val file = editorPath.toFile()
         file.parentFile.mkdirs()
-        file.writeText(gson.toJson(EditorData(_sessionIgnores.toList(), _valueIgnores.toList(), _permanentIgnores.toList())))
+        file.writeText(gson.toJson(EditorData(
+            _sessionIgnores.toList(),
+            _valueIgnores.toList(),
+            _permanentIgnores.toList(),
+            _recompositionIgnores.toList()
+        )))
     }
 }

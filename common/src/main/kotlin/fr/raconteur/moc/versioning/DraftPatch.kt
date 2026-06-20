@@ -2,13 +2,11 @@ package fr.raconteur.moc.versioning
 
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
-import de.marhali.json5.Json5Element
 import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.platform.PlatformService
 import java.nio.file.Path
-import java.nio.file.Paths
 
 object DraftPatch {
     private val gson = GsonBuilder().setPrettyPrinting().create()
@@ -56,25 +54,6 @@ object DraftPatch {
         if (na is List<*> && nb is List<*>)
             return na.size == nb.size && na.indices.all { i -> valueEquals(na[i], nb[i]) }
         return false
-    }
-
-    private fun json5ToNative(value: Any?): Any? = when (value) {
-        is Json5Element -> when {
-            value.isJson5Null      -> null
-            value.isJson5Primitive -> value.asJson5Primitive.let { p ->
-                when {
-                    p.isBoolean -> p.asBoolean
-                    p.isNumber  -> p.asNumber
-                    else        -> p.asString
-                }
-            }
-            value.isJson5Object -> value.asJson5Object.entrySet()
-                .associate { (k, v) -> k to json5ToNative(v) }
-            value.isJson5Array  -> value.asJson5Array.asList()
-                .map { json5ToNative(it) }
-            else -> null
-        }
-        else -> value
     }
 
     fun setValueEntry(diff: OptionDiff.New, mode: PatchMode) =
