@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.gui.AppState
-import fr.raconteur.moc.gui.Screen
+import fr.raconteur.moc.gui.FocusedPanel
 import fr.raconteur.moc.gui.components.*
 import fr.raconteur.moc.versioning.PatchEntry
 import fr.raconteur.moc.versioning.PatchMode
@@ -50,7 +50,7 @@ fun FilesScreen(state: AppState) {
 
         LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
             itemsIndexed(entries) { i, (path, fileDiff) ->
-                val selected   = i == state.fileIndex
+                val selected   = state.focusedPanel == FocusedPanel.Changes && i == state.fileIndex
                 val fileEntry  = fileRootDraftEntry(draftEntries, path)
                 val hasSub     = hasSubDraft(draftEntries, path, "$")
                 val draftLabel = when {
@@ -94,8 +94,7 @@ fun FilesScreen(state: AppState) {
                 OutlinedButton(onClick = { state.openSelected() }) { Text("↵  Open") }
                 Spacer(Modifier.weight(1f))
                 if (draftEntries.isNotEmpty()) {
-                    Button(onClick = { state.draftIndex = 0; state.screen = Screen.Draft }) { Text("E  Entries") }
-                    Button(onClick = { state.screen = Screen.Finalize })                    { Text("F  Finalize") }
+                    Button(onClick = { state.finalizeDialogVisible = true }) { Text("F  Finalize") }
                 }
             }
         }

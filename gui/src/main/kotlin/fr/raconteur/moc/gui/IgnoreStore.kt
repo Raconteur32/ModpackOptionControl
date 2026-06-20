@@ -7,7 +7,7 @@ import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.platform.PlatformService
 import java.nio.file.Path
 
-enum class IgnoreKind { Session, Value, Permanent }
+enum class IgnoreKind { Session, Value, Permanent, Directory }
 
 data class IgnoreEntry(
     @SerializedName("file_path")    val filePath: String,
@@ -94,6 +94,7 @@ object IgnoreStore {
         IgnoreKind.Session   -> _sessionIgnores
         IgnoreKind.Value     -> _valueIgnores
         IgnoreKind.Permanent -> _permanentIgnores
+        IgnoreKind.Directory -> error("Directory ignores are not stored in IgnoreStore")
     }
 
     private fun load() {

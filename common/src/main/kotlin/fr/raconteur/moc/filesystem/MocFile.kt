@@ -1,6 +1,5 @@
 package fr.raconteur.moc.filesystem
 
-import org.mozilla.universalchardet.UniversalDetector
 import de.marhali.json5.Json5Array
 import de.marhali.json5.Json5Element
 import de.marhali.json5.Json5Object
@@ -9,14 +8,10 @@ import fr.raconteur.moc.content.ContentType
 import fr.raconteur.moc.content.ContentTypeRegistry
 import fr.raconteur.moc.content.FlatContent
 import fr.raconteur.moc.content.FlatContentDiff
-import fr.raconteur.moc.content.PropertiesContentType
 import fr.raconteur.moc.content.TextContentType
 import java.io.FileOutputStream
-import java.nio.ByteBuffer
 import java.nio.charset.Charset
-import java.nio.charset.CodingErrorAction
 import java.nio.charset.StandardCharsets
-import java.nio.file.Files
 import java.nio.file.Path
 
 class MocFile private constructor(
@@ -39,10 +34,10 @@ class MocFile private constructor(
             val absPath = fileSystem.getRootPath().resolve(relativePath)
             if (!absPath.toFile().exists()) throw RuntimeException("File does not exist: $absPath")
             val meta = fileSystem.getFileMetadata(relativePath)?.toMutableMap() ?: mutableMapOf()
-            if (!meta.containsKey("encoding")) meta["encoding"] = detectEncoding(absPath)
+            if (!meta.containsKey("encoding")) meta["encoding"] = MocFileInspector.detectEncoding(absPath)
             if (!meta.containsKey("content")) {
                 val probe = MocFile(fileSystem, relativePath, exists = true, metadata = meta.toMutableMap())
-                meta["content"] = inferContentType(probe).id
+                meta["content"] = MocFileInspector.inferContentType(probe).id
             }
             val file = MocFile(fileSystem, relativePath, exists = true, metadata = meta)
             file.ensureContentTypeSpecificMetadata()
@@ -75,73 +70,6 @@ class MocFile private constructor(
             val file = MocFile(fileSystem, relativePath, exists, meta)
             file.ensureContentTypeSpecificMetadata()
             return file
-        }
-
-        fun isBinary(path: Path): Boolean {
-            val buffer = ByteArray(8000)
-            val read = Files.newInputStream(path).use { it.read(buffer) }
-            if (read <= 0) return false
-            return buffer.take(read).any { it == 0.toByte() }
-        }
-
-        private val fileNameOverrides: Map<String, ContentType> = mapOf(
-            "options.txt" to PropertiesContentType
-        )
-
-        private fun inferContentType(probe: MocFile): ContentType {
-            fileNameOverrides[probe.getFileName()]?.let { return it }
-            var bestType: ContentType? = null
-            var bestScore = 0
-            for (type in ContentTypeRegistry.getAll()) {
-                val score = type.checkConfidenceScore(probe)
-                if (score > bestScore) {
-                    bestType = type
-                    bestScore = score
-                }
-            }
-            return if (bestScore == 0) TextContentType else bestType!!
-        }
-
-        private fun detectEncoding(path: Path): String {
-            if (isBinary(path)) throw IllegalArgumentException("File appears to be binary: $path")
-            detectBOM(path)?.let { return it }
-            val data = Files.readAllBytes(path)
-            val detected = UniversalDetector.detectCharset(path)
-            if (detected != null) return detected
-            try {
-                StandardCharsets.UTF_8.newDecoder()
-                    .onMalformedInput(CodingErrorAction.REPORT)
-                    .decode(ByteBuffer.wrap(data))
-                return StandardCharsets.UTF_8.name()
-            } catch (_: Exception) {}
-            return Charset.defaultCharset().name()
-        }
-
-        private fun detectBOM(path: Path): String? {
-            val bytes = Files.newInputStream(path).use { it.readNBytes(4) }
-            return when {
-                bytes.size >= 3
-                        && bytes[0] == 0xEF.toByte()
-                        && bytes[1] == 0xBB.toByte()
-                        && bytes[2] == 0xBF.toByte() -> "UTF-8"
-                bytes.size >= 4
-                        && bytes[0] == 0x00.toByte()
-                        && bytes[1] == 0x00.toByte()
-                        && bytes[2] == 0xFE.toByte()
-                        && bytes[3] == 0xFF.toByte() -> "UTF-32BE"
-                bytes.size >= 4
-                        && bytes[0] == 0xFF.toByte()
-                        && bytes[1] == 0xFE.toByte()
-                        && bytes[2] == 0x00.toByte()
-                        && bytes[3] == 0x00.toByte() -> "UTF-32LE"
-                bytes.size >= 2
-                        && bytes[0] == 0xFE.toByte()
-                        && bytes[1] == 0xFF.toByte() -> "UTF-16BE"
-                bytes.size >= 2
-                        && bytes[0] == 0xFF.toByte()
-                        && bytes[1] == 0xFE.toByte() -> "UTF-16LE"
-                else -> null
-            }
         }
     }
 

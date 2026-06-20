@@ -15,6 +15,7 @@ import fr.raconteur.moc.content.anyToJson5Element
 import fr.raconteur.moc.versioning.EntryKind
 import fr.raconteur.moc.versioning.Patch
 import fr.raconteur.moc.versioning.PatchEntry
+import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.PatchMode
 import java.nio.file.Files
 import java.nio.file.Path
@@ -23,12 +24,15 @@ import kotlin.io.path.isRegularFile
 
 open class MocFileSystem(
     private val rootPath: Path,
-    private val ignoredPaths: List<Path> = emptyList()
+    private val ignoredPaths: List<Path> = emptyList(),
+    hasRef: Boolean = false,
+    private val onRefError: (patchName: String, e: Exception) -> Unit = { _, _ -> }
 ) {
     private val gson = GsonBuilder().setPrettyPrinting().create()
-    private val metadataJsonFile: Path     = rootPath.resolve("mocmetadata.json")
-    private val appliedPatchesFile: Path   = rootPath.resolve("mocappliedpatches.json")
-    private val appliedLogsDir: Path       = rootPath.resolve("mocappliedlogs")
+    private val metasDir: Path             = rootPath.resolve("mocfsmetas")
+    private val metadataJsonFile: Path     = metasDir.resolve("mocmetadata.json")
+    private val appliedPatchesFile: Path   = metasDir.resolve("mocappliedpatches.json")
+    private val appliedLogsDir: Path       = metasDir.resolve("mocappliedlogs")
     private val allMetadata: MutableMap<String, MutableMap<String, String>> = loadAllMetadata()
 
     private val _files: MutableMap<Path, MocFile> = mutableMapOf()
@@ -37,7 +41,18 @@ open class MocFileSystem(
     private val _appliedPatches: MutableList<String> = loadAppliedPatches()
     val appliedPatches: List<String> get() = _appliedPatches.toList()
 
-    init { scan() }
+    private var ref: MocFileSystem? = null
+
+    init {
+        scan()
+        if (hasRef) {
+            val refPath = metasDir.resolve("ref")
+            refPath.toFile().deleteRecursively()
+            val newRef = MocFileSystem(refPath)
+            newRef.applyMultiplePatches(_appliedPatches.toList(), onError = onRefError)
+            ref = newRef
+        }
+    }
 
     fun getRootPath(): Path = rootPath
     fun getMetadataFile(): Path = metadataJsonFile
@@ -71,10 +86,12 @@ open class MocFileSystem(
         _appliedPatches.clear()
         _appliedPatches.addAll(loadAppliedPatches())
         scan()
+        ref?.reload()
     }
 
-    fun applyPatch(patch: Patch, forceDelete: Boolean) {
-        val entriesToApply = patch.entries.filter { shouldApply(it, forceDelete) }
+    fun applyPatch(patch: Patch, forceOverride: Boolean = false) {
+        val refDiff: FileSystemDiff? = ref?.let { diffFrom(it) }
+        val entriesToApply = patch.entries.filter { shouldApply(it, refDiff, forceOverride) }
 
         for (entry in entriesToApply.filter { it.optionPath == "" && it.kind == EntryKind.DELETION }) {
             val file = _files[Path.of(entry.filePath)]
@@ -117,6 +134,7 @@ open class MocFileSystem(
         _appliedPatches.add(patch.name)
         saveAppliedPatches()
         writeApplicationLog(patch.name, entriesToApply)
+        ref?.applyPatch(patch, forceOverride = true)
     }
 
     private fun writeApplicationLog(patchName: String, entries: List<PatchEntry>) {
@@ -134,14 +152,20 @@ open class MocFileSystem(
         appliedLogsDir.resolve("applied.$patchName.json5").toFile().writeText(gson.toJson(array))
     }
 
-    private fun shouldApply(entry: PatchEntry, forceDelete: Boolean): Boolean =
+    private fun shouldApply(entry: PatchEntry, refDiff: FileSystemDiff?, forceOverride: Boolean): Boolean =
         when (entry.mode) {
             PatchMode.OVERRIDE -> true
             PatchMode.DEFAULT  -> when (entry.kind) {
-                EntryKind.VALUE    -> !entryExists(entry)
-                EntryKind.DELETION -> forceDelete
+                EntryKind.VALUE    -> !entryExists(entry) || matchesRef(entry, refDiff) || forceOverride
+                EntryKind.DELETION -> matchesRef(entry, refDiff) || forceOverride
             }
         }
+
+    private fun matchesRef(entry: PatchEntry, refDiff: FileSystemDiff?): Boolean {
+        if (refDiff == null) return false
+        val fileDiff = refDiff[Path.of(entry.filePath)] ?: return true
+        return !fileDiff.flatContentDiff.containsKey(entry.optionPath)
+    }
 
     private fun entryExists(entry: PatchEntry): Boolean {
         val path = Path.of(entry.filePath)
@@ -205,11 +229,9 @@ open class MocFileSystem(
         Files.walk(rootPath)
             .filter { file ->
                 file.isRegularFile()
-                    && file != metadataJsonFile
-                    && file != appliedPatchesFile
-                    && !file.startsWith(appliedLogsDir)
+                    && !file.startsWith(metasDir)
                     && ignoredPaths.none { file.startsWith(rootPath.resolve(it)) }
-                    && !MocFile.isBinary(file)
+                    && !MocFileInspector.isBinary(file)
             }
             .forEach { MocFile.load(this, rootPath.relativize(it)) }
     }
@@ -243,6 +265,32 @@ open class MocFileSystem(
     private fun saveAppliedPatches() {
         appliedPatchesFile.parent?.toFile()?.mkdirs()
         appliedPatchesFile.toFile().writeText(gson.toJson(_appliedPatches))
+    }
+
+    fun applyPending(
+        onApplied: (patchName: String) -> Unit = {},
+        onError:   (patchName: String, e: Exception) -> Unit = { _, _ -> }
+    ) {
+        val applied = appliedPatches.toSet()
+        val toApply = PatchList.getAll().filter { it !in applied }
+        if (toApply.isEmpty()) return
+        applyMultiplePatches(toApply, onApplied, onError)
+    }
+
+    fun applyMultiplePatches(
+        patches: List<String>,
+        onApplied: (patchName: String) -> Unit = {},
+        onError:   (patchName: String, e: Exception) -> Unit = { _, _ -> }
+    ) {
+        for (patchName in patches) {
+            try {
+                applyPatch(Patch.load(patchName))
+                onApplied(patchName)
+            } catch (e: Exception) {
+                onError(patchName, e)
+                break
+            }
+        }
     }
 
     fun diffFrom(other: MocFileSystem): FileSystemDiff {

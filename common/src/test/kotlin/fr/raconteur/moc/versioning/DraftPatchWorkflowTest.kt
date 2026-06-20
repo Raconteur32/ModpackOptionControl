@@ -16,7 +16,7 @@ class DraftPatchWorkflowTest {
 
     private val platform   = TestPlatformService.create()
     private val gameDir    get() = platform.tempDir
-    private val devRefDir  get() = platform.tempDir.resolve("config/moc/dev-ref")
+    private val devRefDir  get() = platform.tempDir.resolve("config/moc/dev/ref")
 
     @BeforeAll
     fun initSingletons() {
@@ -176,7 +176,7 @@ class DraftPatchWorkflowTest {
             targetDir.resolve("override-gone.json").toFile().writeText("""{"b": 1}""")
 
             val targetFs = MocFileSystem(targetDir)
-            targetFs.applyPatch(Patch.load("deletion-modes-patch"), forceDelete = false)
+            targetFs.applyPatch(Patch.load("deletion-modes-patch"))
 
             assertEquals(listOf("deletion-modes-patch"), targetFs.appliedPatches,
                 "target filesystem must record the applied patch name")

@@ -6,23 +6,37 @@ import java.nio.file.Path
 object MocMigration {
     fun migrate() {
         migrateFileSystem(PlatformService.INSTANCE.getGameDir())
-        migrateFileSystem(PlatformService.INSTANCE.getConfigDir().resolve("moc/dev-ref"))
+        migrateFileSystem(PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/ref"))
 
         val patchsDir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs")
         patchsDir.toFile().listFiles()
             ?.filter { it.isDirectory }
-            ?.forEach { renameLegacy(it.toPath().resolve(".mocmeta.json"), "mocmeta.json") }
+            ?.forEach { renameLegacy(it.toPath().resolve(".mocmeta.json"), it.toPath().resolve("mocmeta.json")) }
     }
 
     private fun migrateFileSystem(rootPath: Path) {
-        renameLegacy(rootPath.resolve(".mocmetadata.json"), "mocmetadata.json")
-        renameLegacy(rootPath.resolve(".mocappliedpatches.json"), "mocappliedpatches.json")
+        val metasDir = rootPath.resolve("mocfsmetas")
+        // Very old dot-file names → mocfsmetas/
+        renameLegacy(rootPath.resolve(".mocmetadata.json"),      metasDir.resolve("mocmetadata.json"))
+        renameLegacy(rootPath.resolve(".mocappliedpatches.json"), metasDir.resolve("mocappliedpatches.json"))
+        // Flat root files → mocfsmetas/
+        renameLegacy(rootPath.resolve("mocmetadata.json"),       metasDir.resolve("mocmetadata.json"))
+        renameLegacy(rootPath.resolve("mocappliedpatches.json"), metasDir.resolve("mocappliedpatches.json"))
+        // Logs directory → mocfsmetas/
+        moveLegacyDir(rootPath.resolve("mocappliedlogs"),        metasDir.resolve("mocappliedlogs"))
     }
 
-    private fun renameLegacy(legacy: Path, newName: String) {
-        val src = legacy.toFile()
-        if (!src.exists()) return
-        val dst = legacy.resolveSibling(newName).toFile()
-        if (!dst.exists()) src.renameTo(dst)
+    private fun renameLegacy(src: Path, dst: Path) {
+        val srcFile = src.toFile()
+        if (!srcFile.exists()) return
+        dst.toFile().parentFile?.mkdirs()
+        if (!dst.toFile().exists()) srcFile.renameTo(dst.toFile())
+    }
+
+    private fun moveLegacyDir(src: Path, dst: Path) {
+        val srcFile = src.toFile()
+        if (!srcFile.exists() || !srcFile.isDirectory) return
+        dst.toFile().parentFile?.mkdirs()
+        if (!dst.toFile().exists()) srcFile.renameTo(dst.toFile())
     }
 }

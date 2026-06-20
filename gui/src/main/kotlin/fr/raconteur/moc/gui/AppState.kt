@@ -18,31 +18,20 @@ import fr.raconteur.moc.versioning.PatchMode
 import java.nio.file.Path
 
 sealed class Screen {
-    object Files          : Screen()
-    object Diff           : Screen()
+    object Files : Screen()
+    object Diff  : Screen()
     data class Value(val returnTo: Screen) : Screen()
-    object Draft          : Screen()
-    object Finalize       : Screen()
-    object IgnoreSession  : Screen()
-    object IgnoreValue    : Screen()
-    object IgnorePermanent: Screen()
 }
 
-enum class AppTab(val label: String) {
-    Changes("Changes"),
-    Draft("Draft"),
-    IgnoreSession("Skip · Patch"),
-    IgnoreValue("Skip · Value"),
-    IgnorePermanent("Skip · Always")
+enum class IgnoreFilter(val label: String) {
+    All("All"),
+    Session("Until next patch"),
+    Value("Until value change"),
+    Permanent("Permanent"),
+    Directory("Directory ignore")
 }
 
-private fun tabOf(s: Screen): AppTab = when (s) {
-    is Screen.Files, is Screen.Diff, is Screen.Value -> AppTab.Changes
-    is Screen.Draft, is Screen.Finalize              -> AppTab.Draft
-    is Screen.IgnoreSession                          -> AppTab.IgnoreSession
-    is Screen.IgnoreValue                            -> AppTab.IgnoreValue
-    is Screen.IgnorePermanent                        -> AppTab.IgnorePermanent
-}
+enum class FocusedPanel { Changes, Draft, Ignores }
 
 class AppState {
     var entries      by mutableStateOf(loadDiff())
@@ -51,61 +40,15 @@ class AppState {
     var ignoreSessionEntries   by mutableStateOf(IgnoreStore.sessionIgnores)
     var ignoreValueEntries     by mutableStateOf(IgnoreStore.valueIgnores)
     var ignorePermanentEntries by mutableStateOf(IgnoreStore.permanentIgnores)
+    var ignoredDirectories     by mutableStateOf(MocSettings.ignoredPaths.toList())
 
-    var currentTab by mutableStateOf(AppTab.Changes)
-        private set
+    var screen by mutableStateOf<Screen>(Screen.Files)
 
-    private var savedChangesScreen:         Screen = Screen.Files
-    private var savedDraftScreen:           Screen = Screen.Draft
-    private var savedIgnoreSessionScreen:   Screen = Screen.IgnoreSession
-    private var savedIgnoreValueScreen:     Screen = Screen.IgnoreValue
-    private var savedIgnorePermanentScreen: Screen = Screen.IgnorePermanent
-
-    private var _screen by mutableStateOf<Screen>(Screen.Files)
-    var screen: Screen
-        get() = _screen
-        set(value) {
-            val newTab = tabOf(value)
-            if (newTab != currentTab) {
-                saveCurrentTabScreen()
-                currentTab = newTab
-            }
-            _screen = value
-        }
-
-    private fun saveCurrentTabScreen() {
-        when (currentTab) {
-            AppTab.Changes         -> savedChangesScreen         = _screen
-            AppTab.Draft           -> savedDraftScreen           = _screen
-            AppTab.IgnoreSession   -> savedIgnoreSessionScreen   = _screen
-            AppTab.IgnoreValue     -> savedIgnoreValueScreen     = _screen
-            AppTab.IgnorePermanent -> savedIgnorePermanentScreen = _screen
-        }
-    }
-
-    fun switchTab(tab: AppTab) {
-        if (tab == currentTab) return
-        saveCurrentTabScreen()
-        currentTab = tab
-        _screen = when (tab) {
-            AppTab.Changes         -> savedChangesScreen
-            AppTab.Draft           -> savedDraftScreen
-            AppTab.IgnoreSession   -> savedIgnoreSessionScreen
-            AppTab.IgnoreValue     -> savedIgnoreValueScreen
-            AppTab.IgnorePermanent -> savedIgnorePermanentScreen
-        }
-    }
-
-    fun switchToNextTab() {
-        val tabs = AppTab.entries
-        switchTab(tabs[(currentTab.ordinal + 1) % tabs.size])
-    }
-
-    var fileIndex    by mutableStateOf(0)
-    var diffIndex    by mutableStateOf(0)
-    var draftIndex   by mutableStateOf(0)
-    var ignoreIndex  by mutableStateOf(0)
-    var pathStack    by mutableStateOf(listOf("$"))
+    var fileIndex   by mutableStateOf(0)
+    var diffIndex   by mutableStateOf(0)
+    var draftIndex  by mutableStateOf(0)
+    var ignoreIndex by mutableStateOf(0)
+    var pathStack   by mutableStateOf(listOf("$"))
 
     private var _ignoreSearch by mutableStateOf("")
     var ignoreSearch: String
@@ -113,17 +56,29 @@ class AppState {
         set(value) { _ignoreSearch = value; ignoreIndex = 0 }
 
     var ignoreSearchFocused: Boolean = false
-    var valuePath    by mutableStateOf<String?>(null)
-    var patchName    by mutableStateOf("")
+    var clearFocusGeneration by mutableStateOf(0)
+        private set
+
+    fun requestClearFocus() { clearFocusGeneration++ }
+
+    var ignoreFilter  by mutableStateOf(IgnoreFilter.All)
+    var focusedPanel  by mutableStateOf(FocusedPanel.Changes)
+
+    var valuePath      by mutableStateOf<String?>(null)
+    var patchName      by mutableStateOf("")
     var patchNameError by mutableStateOf<String?>(null)
     var lastCreatedPatch by mutableStateOf(PatchList.getAll().lastOrNull())
+
     var confirmMessage by mutableStateOf<String?>(null)
     var confirmAction  by mutableStateOf<(() -> Unit)?>(null)
-    var valueRawMode   by mutableStateOf(true)
-    var ignoreDialogVisible   by mutableStateOf(false)
-    var ignoreDialogSelection by mutableStateOf(0)
+
+    var valueRawMode by mutableStateOf(true)
+
+    var ignoreDialogVisible    by mutableStateOf(false)
+    var ignoreDialogSelection  by mutableStateOf(0)
     var ignoreDirDialogVisible by mutableStateOf(false)
     var ignoreDirDialogPath    by mutableStateOf("")
+    var finalizeDialogVisible  by mutableStateOf(false)
 
     val ignoreDialogIsFile: Boolean get() = screen is Screen.Files
 
@@ -143,49 +98,72 @@ class AppState {
         ignoreSessionEntries   = IgnoreStore.sessionIgnores
         ignoreValueEntries     = IgnoreStore.valueIgnores
         ignorePermanentEntries = IgnoreStore.permanentIgnores
-        val n = currentIgnoreEntries().size
+        ignoredDirectories     = MocSettings.ignoredPaths.toList()
+        val n = if (ignoreFilter == IgnoreFilter.Directory) ignoredDirectories.size
+                else currentIgnoreEntriesWithKind().size
         ignoreIndex = ignoreIndex.coerceIn(0, (n - 1).coerceAtLeast(0))
     }
 
-    fun currentIgnoreEntries(): List<IgnoreEntry> {
-        val raw = when (screen) {
-            is Screen.IgnoreSession   -> ignoreSessionEntries
-            is Screen.IgnoreValue     -> ignoreValueEntries
-            is Screen.IgnorePermanent -> ignorePermanentEntries
-            else                      -> return emptyList()
+    fun currentIgnoreEntriesWithKind(): List<Pair<IgnoreEntry, IgnoreKind>> {
+        val raw: List<Pair<IgnoreEntry, IgnoreKind>> = when (ignoreFilter) {
+            IgnoreFilter.All ->
+                ignoreSessionEntries.map   { it to IgnoreKind.Session } +
+                ignoreValueEntries.map     { it to IgnoreKind.Value } +
+                ignorePermanentEntries.map { it to IgnoreKind.Permanent } +
+                ignoredDirectories.map     { IgnoreEntry(it.toString(), "", null) to IgnoreKind.Directory }
+            IgnoreFilter.Session   -> ignoreSessionEntries.map   { it to IgnoreKind.Session }
+            IgnoreFilter.Value     -> ignoreValueEntries.map     { it to IgnoreKind.Value }
+            IgnoreFilter.Permanent -> ignorePermanentEntries.map { it to IgnoreKind.Permanent }
+            IgnoreFilter.Directory -> return emptyList()
         }
         if (_ignoreSearch.isBlank()) return raw
         val q = _ignoreSearch.lowercase()
-        return raw.filter { it.filePath.lowercase().contains(q) || it.optionPath.lowercase().contains(q) }
+        return raw.filter { (entry, _) ->
+            entry.filePath.lowercase().contains(q) || entry.optionPath.lowercase().contains(q)
+        }
     }
 
     fun currentFilePath(): Path? = entries.getOrNull(fileIndex)?.key
+
+    // ── Focus ─────────────────────────────────────────────────────────────
+
+    fun switchFocusNext() {
+        focusedPanel = when (focusedPanel) {
+            FocusedPanel.Changes -> FocusedPanel.Draft
+            FocusedPanel.Draft   -> FocusedPanel.Ignores
+            FocusedPanel.Ignores -> FocusedPanel.Changes
+        }
+    }
 
     // ── Navigation ────────────────────────────────────────────────────────
 
     fun moveUp() {
         if (confirmMessage != null) return
-        when (screen) {
-            is Screen.Files -> if (fileIndex > 0) fileIndex--
-            is Screen.Diff  -> if (diffIndex > 0) diffIndex--
-            is Screen.Draft -> if (draftIndex > 0) draftIndex--
-            is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent ->
-                if (ignoreIndex > 0) ignoreIndex--
-            else -> {}
+        when (focusedPanel) {
+            FocusedPanel.Changes -> when (screen) {
+                is Screen.Files -> if (fileIndex > 0) fileIndex--
+                is Screen.Diff  -> if (diffIndex > 0) diffIndex--
+                else -> {}
+            }
+            FocusedPanel.Draft   -> if (draftIndex > 0) draftIndex--
+            FocusedPanel.Ignores -> if (ignoreIndex > 0) ignoreIndex--
         }
     }
 
     fun moveDown() {
         if (confirmMessage != null) return
-        when (screen) {
-            is Screen.Files -> if (fileIndex < entries.size - 1) fileIndex++
-            is Screen.Diff  -> { val n = visibleDiffItems().size; if (diffIndex < n - 1) diffIndex++ }
-            is Screen.Draft -> if (draftIndex < draftEntries.size - 1) draftIndex++
-            is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent -> {
-                val n = currentIgnoreEntries().size
-                if (ignoreIndex < n - 1) ignoreIndex++
+        when (focusedPanel) {
+            FocusedPanel.Changes -> when (screen) {
+                is Screen.Files -> if (fileIndex < entries.size - 1) fileIndex++
+                is Screen.Diff  -> { val n = visibleDiffItems().size; if (diffIndex < n - 1) diffIndex++ }
+                else -> {}
             }
-            else -> {}
+            FocusedPanel.Draft   -> if (draftIndex < draftEntries.size - 1) draftIndex++
+            FocusedPanel.Ignores -> {
+                val max = if (ignoreFilter == IgnoreFilter.Directory) ignoredDirectories.size
+                          else currentIgnoreEntriesWithKind().size
+                if (ignoreIndex < max - 1) ignoreIndex++
+            }
         }
     }
 
@@ -201,20 +179,14 @@ class AppState {
     fun goBack() {
         if (confirmMessage != null) return
         when (val s = screen) {
-            is Screen.Diff     -> if (pathStack.size > 1) { pathStack = pathStack.dropLast(1); diffIndex = 0 }
-                                  else screen = Screen.Files
-            is Screen.Value    -> screen = s.returnTo
-            is Screen.Draft    -> screen = Screen.Files
-            is Screen.Finalize -> { patchName = ""; screen = Screen.Files }
-            is Screen.IgnoreSession, is Screen.IgnoreValue, is Screen.IgnorePermanent -> {
-                ignoreSearch = ""
-                screen = Screen.Files
-            }
+            is Screen.Diff  -> if (pathStack.size > 1) { pathStack = pathStack.dropLast(1); diffIndex = 0 }
+                               else screen = Screen.Files
+            is Screen.Value -> screen = s.returnTo
             else -> {}
         }
     }
 
-    // ── File-level actions (FilesScreen) ──────────────────────────────────
+    // ── File-level actions ────────────────────────────────────────────────
 
     fun currentFileDraftEntry(): PatchEntry? {
         val fp = entries.getOrNull(fileIndex)?.key?.toString() ?: return null
@@ -251,7 +223,7 @@ class AppState {
         refreshDraft()
     }
 
-    // ── Option-level actions (DiffScreen) ─────────────────────────────────
+    // ── Option-level actions ──────────────────────────────────────────────
 
     fun visibleDiffItems(): List<String> {
         val fileDiff        = entries.getOrNull(fileIndex)?.value ?: return emptyList()
@@ -308,7 +280,7 @@ class AppState {
         refreshDraft()
     }
 
-    // ── Value-level actions (ValueScreen) ─────────────────────────────────
+    // ── Value-level actions ───────────────────────────────────────────────
 
     fun applyCurrentValue(mode: PatchMode) {
         if (confirmMessage != null) return
@@ -339,7 +311,7 @@ class AppState {
         refreshDraft()
     }
 
-    // ── Draft-level actions (DraftScreen) ─────────────────────────────────
+    // ── Draft-level actions ───────────────────────────────────────────────
 
     fun removeCurrentDraftEntry() {
         if (confirmMessage != null) return
@@ -348,7 +320,7 @@ class AppState {
         refreshDraft()
     }
 
-    // ── Ignore actions ─────────────────────────────────────────────────────
+    // ── Ignore actions ────────────────────────────────────────────────────
 
     fun showIgnoreDialog() {
         if (ignoreDialogVisible || confirmMessage != null) return
@@ -366,6 +338,13 @@ class AppState {
         ignoreDirDialogVisible = false
         if (dir.isBlank()) return
         MocSettings.addIgnoredPath(dir.trim())
+        McInstanceMocFileSystem.reload()
+        McInstanceRefMocFileSystem.reload()
+        refreshDiff()
+    }
+
+    fun removeIgnoredDirectory(path: Path) {
+        MocSettings.removeIgnoredPath(path.toString())
         McInstanceMocFileSystem.reload()
         McInstanceRefMocFileSystem.reload()
         refreshDiff()
@@ -394,7 +373,6 @@ class AppState {
                 val optDiff = entries.getOrNull(fileIndex)?.value?.flatContentDiff?.get(vp) ?: return
                 Triple(path, vp, optDiff.newValue)
             }
-            else -> return
         }
         val targetValue = if (kind == IgnoreKind.Value) newValue?.toString() else null
         IgnoreStore.add(IgnoreEntry(fp, optionPath, targetValue), kind)
@@ -403,13 +381,17 @@ class AppState {
     }
 
     fun removeCurrentIgnoreEntry() {
-        val kind = when (screen) {
-            is Screen.IgnoreSession   -> IgnoreKind.Session
-            is Screen.IgnoreValue     -> IgnoreKind.Value
-            is Screen.IgnorePermanent -> IgnoreKind.Permanent
-            else -> return
+        if (ignoreFilter == IgnoreFilter.Directory) {
+            val dir = ignoredDirectories.getOrNull(ignoreIndex) ?: return
+            removeIgnoredDirectory(dir)
+            return
         }
-        val entry = currentIgnoreEntries().getOrNull(ignoreIndex) ?: return
+        val list = currentIgnoreEntriesWithKind()
+        val (entry, kind) = list.getOrNull(ignoreIndex) ?: return
+        if (kind == IgnoreKind.Directory) {
+            removeIgnoredDirectory(Path.of(entry.filePath))
+            return
+        }
         IgnoreStore.remove(entry.filePath, entry.optionPath, kind)
         refreshIgnore()
         refreshDiff()
@@ -443,7 +425,6 @@ class AppState {
     private fun loadDiff(): List<Map.Entry<Path, MocFileDiff>> {
         val rawDiff = McInstanceMocFileSystem.diffFrom(McInstanceRefMocFileSystem)
 
-        // Invalidate value ignores whose target value no longer matches the current diff
         val stale = IgnoreStore.valueIgnores.filter { ignore ->
             val fileDiff = rawDiff[Path.of(ignore.filePath)] ?: return@filter false
             val optDiff  = fileDiff.flatContentDiff[ignore.optionPath] ?: return@filter false

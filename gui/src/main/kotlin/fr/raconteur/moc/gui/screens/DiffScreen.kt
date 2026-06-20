@@ -20,6 +20,7 @@ import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.directChildren
 import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.gui.AppState
+import fr.raconteur.moc.gui.FocusedPanel
 import fr.raconteur.moc.gui.Screen
 import fr.raconteur.moc.gui.components.DraftBadge
 import fr.raconteur.moc.versioning.PatchEntry
@@ -59,7 +60,7 @@ fun DiffScreen(state: AppState) {
         } else {
             LazyColumn(state = listState, modifier = Modifier.weight(1f)) {
                 itemsIndexed(visible) { i, path ->
-                    val selected    = i == state.diffIndex
+                    val selected    = state.focusedPanel == FocusedPanel.Changes && i == state.diffIndex
                     val entry       = fileDiff.flatContentDiff[path]
                     val hasChildren = directChildren(allPaths, path).isNotEmpty()
                     val entryDraft  = draftForOption(draftEntries, filePathStr, path)

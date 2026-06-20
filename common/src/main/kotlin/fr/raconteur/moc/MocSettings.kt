@@ -13,7 +13,7 @@ import kotlin.io.path.writeText
 object MocSettings {
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
-    private val defaultIgnoredPaths = listOf("mods", "resourcepacks", "logs", "config/moc.json", "config/moc", "mocmetadata.json", "mocappliedpatches.json")
+    private val defaultIgnoredPaths = listOf("mods", "resourcepacks", "logs", "config/moc.json", "config/moc", "mocfsmetas")
 
     private fun settingsPath(): Path =
         PlatformService.INSTANCE.getConfigDir().resolve("moc.json")
@@ -48,6 +48,18 @@ object MocSettings {
         val arr = _data.getAsJsonArray("ignored_paths")
             ?: JsonArray().also { _data.add("ignored_paths", it) }
         arr.add(pathStr)
+        val sp = settingsPath()
+        sp.createParentDirectories()
+        sp.writeText(gson.toJson(_data))
+    }
+
+    fun removeIgnoredPath(pathStr: String) {
+        val p = Path.of(pathStr)
+        if (!_ignoredPaths.removeIf { it == p }) return
+        val arr = _data.getAsJsonArray("ignored_paths") ?: return
+        for (i in 0 until arr.size()) {
+            if (Path.of(arr[i].asString) == p) { arr.remove(i); break }
+        }
         val sp = settingsPath()
         sp.createParentDirectories()
         sp.writeText(gson.toJson(_data))

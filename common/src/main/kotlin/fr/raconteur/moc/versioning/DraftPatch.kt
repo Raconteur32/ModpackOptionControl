@@ -130,7 +130,7 @@ object DraftPatch {
 
         val patch = Patch(patchName, _entries.toList(), filteredMeta)
         PatchList.add(patchName)
-        McInstanceRefMocFileSystem.applyPatch(patch, forceDelete = true)
+        McInstanceRefMocFileSystem.applyPatch(patch, forceOverride = true)
         clear()
         return patch
     }

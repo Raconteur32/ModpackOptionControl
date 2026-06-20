@@ -28,6 +28,16 @@ object GuiPlatformService : PlatformService {
 
     override fun getPlatformName(): String = "Gui"
 
+    override fun logInfo(message: String) = println("[MOC] $message")
+    override fun logError(message: String, e: Exception?) {
+        System.err.println("[MOC][ERROR] $message")
+        e?.printStackTrace(System.err)
+    }
+    override fun logCritical(message: String, e: Exception?) {
+        System.err.println("[MOC][CRITICAL] $message")
+        e?.printStackTrace(System.err)
+    }
+
     override fun getGameDir(): Path = detectedGameDir
 
     override fun getConfigDir(): Path = detectedGameDir.resolve("config")
