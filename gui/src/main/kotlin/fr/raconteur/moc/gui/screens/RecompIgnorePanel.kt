@@ -16,7 +16,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import fr.raconteur.moc.gui.IgnoreStore
 import fr.raconteur.moc.gui.PatchesState
 import fr.raconteur.moc.gui.RecompFocusedPanel
 
@@ -78,8 +77,8 @@ fun RecompIgnorePanel(state: PatchesState) {
                         }
                         OutlinedButton(
                             onClick = {
-                                IgnoreStore.removeRecomp(entry.filePath, entry.optionPath)
-                                state.refreshRecompIgnores()
+                                state.recompIgnoreIndex = i
+                                state.recompRemoveCurrentIgnore()
                             },
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) { Text("R", fontSize = 11.sp) }
