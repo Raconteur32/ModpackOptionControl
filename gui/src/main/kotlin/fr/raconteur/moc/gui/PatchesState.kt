@@ -184,18 +184,20 @@ class PatchesState {
     // ── Recomp diff items ─────────────────────────────────────────────────────
 
     fun recompVisibleDiffItems(): List<String> {
-        val fileDiff = recompEntries.getOrNull(recompFileIndex)?.value ?: return emptyList()
+        val fileDiff   = recompEntries.getOrNull(recompFileIndex)?.value ?: return emptyList()
+        val fp         = recompEntries.getOrNull(recompFileIndex)?.key?.toString() ?: return emptyList()
         val allNonRoot = fileDiff.flatContentDiff.keys.filter { it != "$" }.toList()
+        val ignores    = recompIgnores  // mutableStateOf read — Compose tracks this dependency
         return directChildren(allNonRoot, recompPathStack.last()).filter { path ->
-            !isRecompEffectivelyHidden(recompEntries.getOrNull(recompFileIndex)?.key?.toString() ?: "", path, fileDiff, allNonRoot)
+            !isRecompEffectivelyHidden(fp, path, fileDiff, allNonRoot, ignores)
         }
     }
 
-    private fun isRecompEffectivelyHidden(fp: String, path: String, fileDiff: MocFileDiff, allNonRoot: List<String>): Boolean {
-        if (IgnoreStore.isIgnoredForRecomp(fp, path)) return true
+    private fun isRecompEffectivelyHidden(fp: String, path: String, fileDiff: MocFileDiff, allNonRoot: List<String>, ignores: List<IgnoreEntry>): Boolean {
+        if (ignores.any { it.filePath == fp && it.optionPath == path }) return true
         val children = directChildren(allNonRoot, path)
         if (children.isEmpty()) return false
-        return children.all { isRecompEffectivelyHidden(fp, it, fileDiff, allNonRoot) }
+        return children.all { isRecompEffectivelyHidden(fp, it, fileDiff, allNonRoot, ignores) }
     }
 
     // ── Recomp file-level actions ─────────────────────────────────────────────
