@@ -128,6 +128,12 @@ object RecompositionDraft {
         val start = rangeStart ?: error("No active recomposition")
         val end   = rangeEnd   ?: error("No active recomposition")
 
+        val allNames = PatchList.getAll()
+        val rangeNames = allNames.subList(start, end + 1).toList()
+        require(patchName !in rangeNames) {
+            "Patch name '$patchName' is part of the recomposed range and would be immediately deleted"
+        }
+
         val dir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName")
         dir.toFile().mkdirs()
         dir.resolve("patch.json").toFile().writeText(_entries.toJson5String())
@@ -144,11 +150,10 @@ object RecompositionDraft {
         dir.resolve("mocmeta.json").toFile().writeText(gson.toJson(filteredMeta))
 
         // Update active patch list: replace range with the new patch
-        val allNames = PatchList.getAll().toMutableList()
-        val rangeNames = allNames.subList(start, end + 1).toList()
-        allNames.subList(start, end + 1).clear()
-        allNames.add(start, patchName)
-        PatchList.setAll(allNames)
+        val mutableNames = allNames.toMutableList()
+        mutableNames.subList(start, end + 1).clear()
+        mutableNames.add(start, patchName)
+        PatchList.setAll(mutableNames)
 
         // Record range patches as deleted and remove their folders
         rangeNames.forEach {
