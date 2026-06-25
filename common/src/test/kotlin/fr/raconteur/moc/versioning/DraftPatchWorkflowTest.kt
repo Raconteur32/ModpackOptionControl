@@ -123,7 +123,7 @@ class DraftPatchWorkflowTest {
 
         DraftPatch.finalize("update-patch")
 
-        assertEquals(listOf("update-patch"), McInstanceRefMocFileSystem.appliedPatches,
+        assertEquals(listOf("update-patch"), McInstanceRefMocFileSystem.appliedPatches.map { it.patch },
             "dev-ref must record the applied patch name")
 
         // dev-ref: x must be 42
@@ -161,7 +161,7 @@ class DraftPatchWorkflowTest {
         )
         DraftPatch.finalize("deletion-modes-patch")
 
-        assertEquals(listOf("deletion-modes-patch"), McInstanceRefMocFileSystem.appliedPatches,
+        assertEquals(listOf("deletion-modes-patch"), McInstanceRefMocFileSystem.appliedPatches.map { it.patch },
             "dev-ref must record the applied patch name")
 
         // Both files are gone from dev-ref (forceDelete=true in finalize)
@@ -178,7 +178,7 @@ class DraftPatchWorkflowTest {
             val targetFs = MocFileSystem(targetDir)
             targetFs.applyPatch(Patch.load("deletion-modes-patch"))
 
-            assertEquals(listOf("deletion-modes-patch"), targetFs.appliedPatches,
+            assertEquals(listOf("deletion-modes-patch"), targetFs.appliedPatches.map { it.patch },
                 "target filesystem must record the applied patch name")
 
             assertTrue(

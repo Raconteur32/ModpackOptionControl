@@ -19,8 +19,11 @@ import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.PatchMode
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
 import kotlin.io.path.isDirectory
 import kotlin.io.path.isRegularFile
+
+data class AppliedPatchEntry(val patch: String, val datetime: String)
 
 open class MocFileSystem(
     private val rootPath: Path,
@@ -38,8 +41,8 @@ open class MocFileSystem(
     private val _files: MutableMap<Path, MocFile> = mutableMapOf()
     val files: Collection<MocFile> get() = _files.values
 
-    private val _appliedPatches: MutableList<String> = loadAppliedPatches()
-    val appliedPatches: List<String> get() = _appliedPatches.toList()
+    private val _appliedPatches: MutableList<AppliedPatchEntry> = loadAppliedPatches()
+    val appliedPatches: List<AppliedPatchEntry> get() = _appliedPatches.toList()
 
     private var ref: MocFileSystem? = null
 
@@ -49,7 +52,7 @@ open class MocFileSystem(
             val refPath = metasDir.resolve("ref")
             refPath.toFile().deleteRecursively()
             val newRef = MocFileSystem(refPath)
-            newRef.applyMultiplePatches(_appliedPatches.toList(), onError = onRefError)
+            newRef.applyMultiplePatches(_appliedPatches.map { it.patch }, onError = onRefError)
             ref = newRef
         }
     }
@@ -131,7 +134,7 @@ open class MocFileSystem(
             saveAllMetadata()
         }
 
-        _appliedPatches.add(patch.name)
+        _appliedPatches.add(AppliedPatchEntry(patch = patch.name, datetime = Instant.now().toString()))
         saveAppliedPatches()
         writeApplicationLog(patch.name, entriesToApply)
         ref?.applyPatch(patch, forceOverride = true)
@@ -251,13 +254,21 @@ open class MocFileSystem(
         metadataJsonFile.toFile().writeText(gson.toJson(allMetadata))
     }
 
-    private fun loadAppliedPatches(): MutableList<String> {
+    private fun loadAppliedPatches(): MutableList<AppliedPatchEntry> {
         if (!appliedPatchesFile.toFile().exists()) return mutableListOf()
+        val text = appliedPatchesFile.toFile().readText()
         return try {
-            val type = object : TypeToken<MutableList<String>>() {}.type
-            gson.fromJson(appliedPatchesFile.toFile().readText(), type) ?: mutableListOf()
+            val type = object : TypeToken<MutableList<AppliedPatchEntry>>() {}.type
+            gson.fromJson(text, type) ?: mutableListOf()
         } catch (_: Exception) {
-            mutableListOf()
+            // Old format: list of strings — migrate to objects with empty datetime
+            try {
+                val type = object : TypeToken<MutableList<String>>() {}.type
+                val strings: MutableList<String> = gson.fromJson(text, type) ?: mutableListOf()
+                strings.map { AppliedPatchEntry(patch = it, datetime = "") }.toMutableList()
+            } catch (_: Exception) {
+                mutableListOf()
+            }
         }
     }
 
@@ -270,7 +281,7 @@ open class MocFileSystem(
         onApplied: (patchName: String) -> Unit = {},
         onError:   (patchName: String, e: Exception) -> Unit = { _, _ -> }
     ) {
-        val applied = appliedPatches.toSet()
+        val applied = appliedPatches.map { it.patch }.toSet()
         val toApply = PatchList.getAll().filter { it !in applied }
         if (toApply.isEmpty()) return
         applyMultiplePatches(toApply, onApplied, onError)
