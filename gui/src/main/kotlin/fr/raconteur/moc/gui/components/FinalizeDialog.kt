@@ -18,6 +18,8 @@ import fr.raconteur.moc.versioning.PatchList
 
 @Composable
 fun FinalizeDialog(state: AppState) {
+    val canAmend = PatchList.getAll().isNotEmpty()
+
     val onDismiss = {
         state.finalizeDialogVisible = false
         state.patchName = ""
@@ -64,6 +66,25 @@ fun FinalizeDialog(state: AppState) {
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedButton(onClick = onDismiss) { Text("Cancel") }
+                    if (canAmend) {
+                        OutlinedButton(
+                            onClick = {
+                                val lastIdx = DraftPatch.finalizeForAmend()
+                                IgnoreStore.resetSession()
+                                state.finalizeDialogVisible = false
+                                state.patchName             = ""
+                                state.patchNameError        = null
+                                state.refreshDiff()
+                                state.refreshDraft()
+                                state.refreshIgnore()
+                                state.fileIndex = 0
+                                state.diffIndex = 0
+                                state.pathStack = listOf("$")
+                                state.screen    = Screen.Files
+                                state.patchesState.launchAmend(lastIdx)
+                            }
+                        ) { Text("Amend") }
+                    }
                     Button(
                         onClick = {
                             if (state.patchName.isNotBlank() && state.patchNameError == null) {

@@ -23,6 +23,7 @@ object TomlContentType : ContentType() {
         val text = file.getStringContent() ?: return false
         if (text.isBlank()) return false
         return try { parse(text); true } catch (_: Exception) { false }
+            && metadataIsSafe(file)
     }
 
     override fun getContent(file: MocFile): Json5Element? {

@@ -12,18 +12,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import fr.raconteur.moc.gui.IgnoreStore
 import fr.raconteur.moc.gui.PatchesState
-import fr.raconteur.moc.gui.PatchesView
 import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.RecompositionDraft
 
 @Composable
-fun RecompFinalizeDialog(state: PatchesState) {
-    val rangeStart = RecompositionDraft.rangeStart
-    val rangeEnd   = RecompositionDraft.rangeEnd
-    val allPatches = PatchList.getAll()
-    val rangeNames = if (rangeStart != null && rangeEnd != null)
-        allPatches.subList(rangeStart, (rangeEnd + 1).coerceAtMost(allPatches.size))
-    else emptyList()
+fun AmendFinalizeDialog(state: PatchesState) {
+    val lastPatchName = PatchList.getAll().lastOrNull()
 
     val onDismiss = {
         state.recompFinalizeDialogVisible = false
@@ -34,22 +28,19 @@ fun RecompFinalizeDialog(state: PatchesState) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = MaterialTheme.shapes.medium, elevation = 8.dp) {
             Column(
-                modifier = Modifier.padding(32.dp).widthIn(min = 380.dp),
+                modifier = Modifier.padding(32.dp).widthIn(min = 360.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(0.dp)
             ) {
-                Text("FINALIZE RECOMPOSITION", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("AMEND", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    "${state.recompDraftEntries.size} entr${if (state.recompDraftEntries.size != 1) "ies" else "y"} will replace ${rangeNames.size} patch${if (rangeNames.size != 1) "es" else ""}.",
+                    "${state.recompDraftEntries.size} entr${if (state.recompDraftEntries.size != 1) "ies" else "y"} will replace the last patch.",
                     color = Color.Gray, fontSize = 13.sp
                 )
-                if (rangeNames.isNotEmpty()) {
+                if (lastPatchName != null) {
                     Spacer(Modifier.height(2.dp))
-                    Text(
-                        "Replacing: ${rangeNames.joinToString(", ")}",
-                        color = Color.Gray, fontSize = 11.sp
-                    )
+                    Text("Amending: « $lastPatchName »", color = Color.Gray, fontSize = 11.sp)
                 }
                 Spacer(Modifier.height(20.dp))
 
@@ -57,10 +48,10 @@ fun RecompFinalizeDialog(state: PatchesState) {
                     value         = state.recompPatchName,
                     onValueChange = { name ->
                         state.recompPatchName      = name
-                        state.recompPatchNameError = if (name.isNotBlank() && PatchList.contains(name) && name !in rangeNames)
+                        state.recompPatchNameError = if (name.isNotBlank() && PatchList.contains(name) && name != lastPatchName)
                             "« $name » is already taken" else null
                     },
-                    label      = { Text("New patch name") },
+                    label      = { Text("Patch name") },
                     isError    = state.recompPatchNameError != null,
                     singleLine = true,
                     modifier   = Modifier.fillMaxWidth()
@@ -79,11 +70,8 @@ fun RecompFinalizeDialog(state: PatchesState) {
                             if (state.recompPatchName.isNotBlank() && state.recompPatchNameError == null) {
                                 RecompositionDraft.finalize(state.recompPatchName)
                                 IgnoreStore.clearRecompIgnores()
-                                state.recompFinalizeDialogVisible = false
-                                state.recompPatchName      = ""
-                                state.recompPatchNameError = null
                                 state.refreshPatches()
-                                state.view = PatchesView.List
+                                state.finishAmend()
                             }
                         },
                         enabled = state.recompPatchName.isNotBlank() && state.recompPatchNameError == null

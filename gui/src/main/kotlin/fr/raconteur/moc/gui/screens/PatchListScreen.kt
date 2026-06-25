@@ -39,7 +39,13 @@ fun PatchListScreen(state: PatchesState) {
             Spacer(Modifier.width(12.dp))
             Text("${patches.size} patch${if (patches.size != 1) "es" else ""}", color = Color.Gray, fontSize = 13.sp)
             Spacer(Modifier.weight(1f))
-            if (RecompositionDraft.hasActiveDraft()) {
+            if (RecompositionDraft.hasActiveDraft() && !state.isAmendMode) {
+                OutlinedButton(
+                    onClick = { state.cancelRecomposition() },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colors.error)
+                ) { Text("Cancel recomposition", fontSize = 11.sp) }
+                Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = { state.resumeRecomposition() },
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)

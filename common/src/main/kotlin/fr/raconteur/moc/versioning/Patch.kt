@@ -12,19 +12,18 @@ class Patch(
     companion object {
         private val gson = GsonBuilder().setPrettyPrinting().create()
 
-        fun load(patchName: String): Patch {
-            val dir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName")
-            val metaType = object : TypeToken<Map<String, Map<String, String>>>() {}.type
+        fun load(patchName: String): Patch =
+            loadFromDir(PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName"), patchName)
 
+        fun loadFromDir(dir: java.nio.file.Path, name: String = dir.fileName.toString()): Patch {
+            val metaType = object : TypeToken<Map<String, Map<String, String>>>() {}.type
             val entries: List<PatchEntry> = try {
                 parsePatchEntries(dir.resolve("patch.json").toFile().readText())
             } catch (_: Exception) { emptyList() }
-
             val metadata: Map<String, Map<String, String>> = try {
                 gson.fromJson(dir.resolve("mocmeta.json").toFile().readText(), metaType) ?: emptyMap()
             } catch (_: Exception) { emptyMap() }
-
-            return Patch(patchName, entries, metadata)
+            return Patch(name, entries, metadata)
         }
     }
 }

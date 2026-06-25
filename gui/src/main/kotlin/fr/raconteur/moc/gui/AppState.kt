@@ -39,6 +39,11 @@ class AppState {
     var activeTab    by mutableStateOf(AppTab.NewPatch)
     val patchesState  = PatchesState()
 
+    init {
+        patchesState.onAfterPatchDelete    = { refreshDiff() }
+        patchesState.onAfterAmendFinalize  = { refreshDiff() }
+    }
+
     var entries      by mutableStateOf(loadDiff())
     var draftEntries by mutableStateOf<List<PatchEntry>>(DraftPatch.entries.toList())
 

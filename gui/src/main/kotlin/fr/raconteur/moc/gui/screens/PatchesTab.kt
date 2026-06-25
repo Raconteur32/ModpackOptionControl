@@ -32,6 +32,7 @@ fun PatchesTab(state: PatchesState) {
                 if (name != null) {
                     fr.raconteur.moc.versioning.PatchList.delete(name)
                     state.refreshPatches()
+                    state.onAfterPatchDelete?.invoke()
                 }
                 state.deleteConfirmVisible = false
             },
@@ -65,7 +66,7 @@ fun PatchesTab(state: PatchesState) {
 }
 
 @Composable
-private fun RecompositionEditor(state: PatchesState) {
+fun RecompositionEditor(state: PatchesState) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val totalW = constraints.maxWidth.toFloat()
         val totalH = constraints.maxHeight.toFloat()
@@ -146,7 +147,8 @@ private fun RecompositionEditor(state: PatchesState) {
         }
 
         if (state.recompFinalizeDialogVisible) {
-            RecompFinalizeDialog(state)
+            if (state.isAmendMode) AmendFinalizeDialog(state)
+            else RecompFinalizeDialog(state)
         }
     }
 }

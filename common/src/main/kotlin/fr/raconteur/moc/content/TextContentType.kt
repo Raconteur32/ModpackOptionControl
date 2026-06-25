@@ -9,7 +9,7 @@ object TextContentType : ContentType() {
 
     override fun hasPreferredExtension(filename: String) = true
 
-    override fun hasValidContent(file: MocFile) = true
+    override fun hasValidContent(file: MocFile) = metadataIsSafe(file)
 
     override fun checkConfidenceScore(file: MocFile) = 3
 

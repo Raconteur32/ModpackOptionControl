@@ -18,7 +18,7 @@ object JsonContentType : ContentType() {
             json5Reader.parse(content) != null
         } catch (_: Exception) {
             false
-        }
+        } && metadataIsSafe(file)
     }
 
     override fun getContent(file: MocFile): Json5Element? {

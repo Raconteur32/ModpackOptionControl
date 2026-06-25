@@ -14,6 +14,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import fr.raconteur.moc.gui.components.*
 import fr.raconteur.moc.gui.screens.*
+import fr.raconteur.moc.gui.screens.RecompositionEditor
 
 @Composable
 fun App(state: AppState) {
@@ -46,6 +47,11 @@ fun App(state: AppState) {
 
 @Composable
 private fun NewPatchTab(state: AppState) {
+    if (state.patchesState.isAmendMode) {
+        RecompositionEditor(state.patchesState)
+        return
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val totalW = constraints.maxWidth.toFloat()
         val totalH = constraints.maxHeight.toFloat()

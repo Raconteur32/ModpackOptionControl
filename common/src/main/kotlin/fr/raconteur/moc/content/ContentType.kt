@@ -2,6 +2,8 @@ package fr.raconteur.moc.content
 
 import de.marhali.json5.Json5Element
 import fr.raconteur.moc.filesystem.MocFile
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 abstract class ContentType {
     abstract val id: String
@@ -15,6 +17,21 @@ abstract class ContentType {
     abstract fun setContent(file: MocFile, content: Json5Element)
 
     open fun getSpecificMetadata(file: MocFile): Map<String, String> = emptyMap()
+
+    protected fun metadataIsSafe(file: MocFile): Boolean =
+        try {
+            executor.submit<Unit> { getSpecificMetadata(file) }
+                .get(1L, TimeUnit.SECONDS)
+            true
+        } catch (_: Exception) {
+            false
+        }
+
+    companion object {
+        private val executor = Executors.newCachedThreadPool { r ->
+            Thread(r, "moc-metadata-check").also { it.isDaemon = true }
+        }
+    }
 
     open fun checkConfidenceScore(file: MocFile): Int {
         if (!hasValidContent(file)) return 0

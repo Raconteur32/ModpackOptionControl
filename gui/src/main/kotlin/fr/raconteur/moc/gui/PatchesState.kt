@@ -25,8 +25,13 @@ class PatchesState {
     var patchIndex  by mutableStateOf(0)
     var rangeAnchor by mutableStateOf<Int?>(null)
 
+    var isAmendMode by mutableStateOf(
+        RecompositionDraft.hasActiveDraft() && RecompositionDraft.isAmend
+    )
+        private set
+
     var view by mutableStateOf(
-        if (RecompositionDraft.hasActiveDraft()) PatchesView.Recomposition else PatchesView.List
+        if (RecompositionDraft.hasActiveDraft() && !RecompositionDraft.isAmend) PatchesView.Recomposition else PatchesView.List
     )
 
     var deleteConfirmVisible  by mutableStateOf(false)
@@ -41,9 +46,42 @@ class PatchesState {
             return if (anchor <= end) anchor..end else end..anchor
         }
 
+    var onAfterPatchDelete: (() -> Unit)? = null
+    var onAfterAmendFinalize: (() -> Unit)? = null
+
     fun refreshPatches() {
         patches    = PatchList.getAll()
         patchIndex = patchIndex.coerceIn(0, (patches.size - 1).coerceAtLeast(0))
+    }
+
+    fun launchAmend(lastIdx: Int) {
+        isAmendMode = true
+        RecompositionDraft.build(lastIdx, lastIdx, isAmend = true)
+        recompEntries      = RecompositionDraft.cachedDiff
+        recompDraftEntries = RecompositionDraft.entries.toList()
+        recompIgnores      = emptyList()
+        recompScreen       = Screen.Files
+        recompFileIndex    = 0
+        recompDiffIndex    = 0
+        recompDraftIndex   = 0
+        recompIgnoreIndex  = 0
+        recompPathStack    = listOf("$")
+        recompFocusedPanel = RecompFocusedPanel.Changes
+        // view stays PatchesView.List — amend is shown in the NewPatch tab
+    }
+
+    fun finishAmend() {
+        isAmendMode                 = false
+        recompFinalizeDialogVisible = false
+        recompPatchName             = ""
+        recompPatchNameError        = null
+        onAfterAmendFinalize?.invoke()
+    }
+
+    fun cancelRecomposition() {
+        isAmendMode = false
+        RecompositionDraft.clear()
+        IgnoreStore.clearRecompIgnores()
     }
 
     fun tryLaunchRecomposition(startIdx: Int, endIdx: Int) {
@@ -59,7 +97,7 @@ class PatchesState {
     fun launchRecomposition(startIdx: Int, endIdx: Int) {
         RecompositionDraft.build(startIdx, endIdx)
         recompEntries      = RecompositionDraft.cachedDiff
-        recompDraftEntries = emptyList()
+        recompDraftEntries = RecompositionDraft.entries.toList()
         recompIgnores      = emptyList()
         recompScreen       = Screen.Files
         recompFileIndex    = 0

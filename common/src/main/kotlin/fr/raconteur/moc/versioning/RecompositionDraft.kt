@@ -7,6 +7,7 @@ import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.filesystem.MocFileDiff
 import fr.raconteur.moc.filesystem.MocFileSystem
+import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.platform.PlatformService
 import java.nio.file.Path
 
@@ -19,10 +20,14 @@ object RecompositionDraft {
         get() = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/recomp-before")
     private val afterPath: Path
         get() = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/recomp-after")
+    private val amendPath: Path
+        get() = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/amend")
 
     var rangeStart: Int? = null
         private set
     var rangeEnd: Int? = null
+        private set
+    var isAmend: Boolean = false
         private set
 
     private val _entries: MutableList<PatchEntry> = mutableListOf()
@@ -35,12 +40,15 @@ object RecompositionDraft {
 
     fun hasActiveDraft(): Boolean = rangeStart != null
 
-    fun build(startIdx: Int, endIdx: Int) {
-        rangeStart = startIdx
-        rangeEnd   = endIdx
+    fun build(startIdx: Int, endIdx: Int, isAmend: Boolean = false) {
+        rangeStart    = startIdx
+        rangeEnd      = endIdx
+        this.isAmend  = isAmend
         _entries.clear()
         save()
         rebuildDiff()
+        autoPopulateDraft()
+        save()
     }
 
     private fun rebuildDiff() {
@@ -61,11 +69,54 @@ object RecompositionDraft {
         val afterFS = MocFileSystem(afterPath)
         allPatches.subList(0, end + 1).forEach { afterFS.applyPatch(Patch.load(it), forceOverride = true) }
 
+        if (isAmend && amendPath.toFile().exists()) {
+            afterFS.applyPatch(Patch.loadFromDir(amendPath, "amend"), forceOverride = true)
+        }
+
         cachedDiff = afterFS.diffFrom(beforeFS).entries
             .sortedBy { it.key.toString() }
             .toList()
 
         validateEntries()
+    }
+
+    private fun autoPopulateDraft() {
+        val start = rangeStart ?: return
+        val end   = rangeEnd   ?: return
+        val allPatches = PatchList.getAll()
+
+        // Collect all entries from every patch in the range (+ amend patch if applicable)
+        val rangeEntries: List<PatchEntry> = buildList {
+            allPatches.subList(start, end + 1).forEach { addAll(Patch.load(it).entries) }
+            if (isAmend && amendPath.toFile().exists())
+                addAll(Patch.loadFromDir(amendPath, "amend").entries)
+        }
+
+        // Mark as conflicting any pair that shares the same file and overlaps with another
+        val conflicting = mutableSetOf<Pair<String, String>>()
+        for (i in rangeEntries.indices) {
+            val (fp1, op1) = rangeEntries[i].filePath to rangeEntries[i].optionPath
+            for (j in rangeEntries.indices) {
+                if (i == j) continue
+                val (fp2, op2) = rangeEntries[j].filePath to rangeEntries[j].optionPath
+                if (fp1 != fp2) continue
+                if (op1 == op2 || isDescendant(op1, op2) || isDescendant(op2, op1)) {
+                    conflicting.add(fp1 to op1)
+                    conflicting.add(fp2 to op2)
+                }
+            }
+        }
+
+        // Auto-populate draft with non-conflicting entries, using the net diff value
+        // and preserving the original mode from the patch entry
+        val diffMap = cachedDiff.associate { it.key.toString() to it.value }
+        val seen    = mutableSetOf<Pair<String, String>>()
+        for (entry in rangeEntries) {
+            val key = entry.filePath to entry.optionPath
+            if (key in conflicting || !seen.add(key)) continue
+            val optDiff = diffMap[entry.filePath]?.flatContentDiff?.get(entry.optionPath) ?: continue
+            applyDiff(optDiff, entry.mode)
+        }
     }
 
     private fun validateEntries() {
@@ -115,28 +166,29 @@ object RecompositionDraft {
         _entries.find { it.filePath == filePath && it.optionPath == optionPath }
 
     fun clear() {
-        rangeStart = null
-        rangeEnd   = null
+        val wasAmend = isAmend
+        rangeStart   = null
+        rangeEnd     = null
+        isAmend      = false
         _entries.clear()
         cachedDiff = emptyList()
         draftPath.toFile().delete()
         beforePath.toFile().deleteRecursively()
         afterPath.toFile().deleteRecursively()
+        if (wasAmend) amendPath.toFile().deleteRecursively()
     }
 
     fun finalize(patchName: String) {
         val start = rangeStart ?: error("No active recomposition")
         val end   = rangeEnd   ?: error("No active recomposition")
 
-        val allNames = PatchList.getAll()
-        val rangeNames = allNames.subList(start, end + 1).toList()
-        require(patchName !in rangeNames) {
-            "Patch name '$patchName' is part of the recomposed range and would be immediately deleted"
-        }
+        val patchsRoot = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs")
 
-        val dir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName")
-        dir.toFile().mkdirs()
-        dir.resolve("patch.json").toFile().writeText(_entries.toJson5String())
+        // Write to a temp dir so range deletion (which may include patchName) can't clobber the new patch
+        val tempDir = patchsRoot.resolve("temp-$patchName").toFile()
+        tempDir.deleteRecursively()
+        tempDir.mkdirs()
+        tempDir.resolve("patch.json").writeText(_entries.toJson5String())
 
         // Collect file-type metadata from the afterFS metadata file
         val metaType = object : TypeToken<Map<String, Map<String, String>>>() {}.type
@@ -147,19 +199,25 @@ object RecompositionDraft {
         } catch (_: Exception) { emptyMap() }
         val patchFilePaths = _entries.map { it.filePath }.toSet()
         val filteredMeta = allMeta.filter { it.key in patchFilePaths }
-        dir.resolve("mocmeta.json").toFile().writeText(gson.toJson(filteredMeta))
+        tempDir.resolve("mocmeta.json").writeText(gson.toJson(filteredMeta))
 
         // Update active patch list: replace range with the new patch
+        val allNames = PatchList.getAll()
+        val rangeNames = allNames.subList(start, end + 1).toList()
         val mutableNames = allNames.toMutableList()
         mutableNames.subList(start, end + 1).clear()
         mutableNames.add(start, patchName)
         PatchList.setAll(mutableNames)
 
-        // Record range patches as deleted and remove their folders
+        // Record range patches as deleted and remove their folders.
+        // Skip addToDeleted for patchName itself — it was just re-added to the active list.
         rangeNames.forEach {
-            PatchList.addToDeleted(it)
+            if (it != patchName) PatchList.addToDeleted(it)
             PatchList.deleteFolder(it)
         }
+
+        // Rename temp dir to final name now that the range is gone
+        tempDir.renameTo(patchsRoot.resolve(patchName).toFile())
 
         McInstanceRefMocFileSystem.regenerateRefFiles()
 
@@ -173,6 +231,7 @@ object RecompositionDraft {
         val obj = JsonObject()
         obj.addProperty("range_start", start)
         obj.addProperty("range_end", rangeEnd)
+        obj.addProperty("is_amend", isAmend)
         obj.addProperty("entries_raw", _entries.toJson5String())
         file.writeText(gson.toJson(obj))
     }
@@ -184,6 +243,7 @@ object RecompositionDraft {
             val obj = gson.fromJson(file.readText(), JsonObject::class.java) ?: return
             rangeStart = obj.get("range_start")?.asInt ?: return
             rangeEnd   = obj.get("range_end")?.asInt   ?: return
+            isAmend    = obj.get("is_amend")?.asBoolean ?: false
             val raw = obj.get("entries_raw")?.asString ?: ""
             if (raw.isNotBlank()) parsePatchEntries(raw).forEach { _entries.add(it) }
             rebuildDiff()
