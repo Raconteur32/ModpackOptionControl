@@ -1,8 +1,6 @@
-package fr.raconteur.moc.diff
+package fr.raconteur.moc.filesystem
 
 import fr.raconteur.moc.content.OptionDiff
-import fr.raconteur.moc.filesystem.FileDiffKind
-import fr.raconteur.moc.filesystem.MocFileSystem
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeEach

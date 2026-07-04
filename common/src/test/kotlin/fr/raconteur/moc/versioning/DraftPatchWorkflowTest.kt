@@ -142,7 +142,24 @@ class DraftPatchWorkflowTest {
         assertTrue(PatchList.contains("update-patch"), "update-patch must be registered in PatchList")
     }
 
-    // ── Test 3: apply to normal FS — DELETION only with OVERRIDE ─────────────
+    // ── Test 3: finalize clears the draft state ───────────────────────────────
+
+    @Test
+    fun `finalize clears all draft entries`() {
+        gameFile("opts.json", """{"x": 2}""")
+        refFile("opts.json",  """{"x": 1}""")
+
+        val diff = reloadAndDiff()
+        DraftPatch.setValueEntry(
+            diff[Path.of("opts.json")]!!.flatContentDiff["\$['x']"] as OptionDiff.Changed,
+            PatchMode.OVERRIDE
+        )
+        assertTrue(DraftPatch.entries.isNotEmpty(), "precondition: draft must have entries before finalize")
+        DraftPatch.finalize("cleanup-test-patch")
+        assertTrue(DraftPatch.entries.isEmpty(), "finalize must clear all draft entries")
+    }
+
+    // ── Test 4: apply to normal FS — DELETION only with OVERRIDE ─────────────
 
     @Test
     fun `applying patch to normal filesystem only deletes files whose entry mode is OVERRIDE`() {

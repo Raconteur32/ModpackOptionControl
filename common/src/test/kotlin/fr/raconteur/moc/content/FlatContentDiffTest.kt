@@ -1,8 +1,6 @@
-package fr.raconteur.moc.diff
+package fr.raconteur.moc.content
 
 import de.marhali.json5.Json5Primitive
-import fr.raconteur.moc.content.FlatContentDiff
-import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.MocFileSystem
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
@@ -183,5 +181,75 @@ class FlatContentDiffTest {
         val newStr = prim(d.newValue, "new").asString
         assertNotEquals(oldStr, newStr,
             "0xFF and 255 must have different asString representations so the diff detects the change")
+    }
+
+    // ── String and boolean primitives ─────────────────────────────────────────
+
+    @Test
+    fun `string change is reported as Changed`() {
+        val d = changed(diff("a.json", """{"val": "foo"}""", """{"val": "bar"}"""), "\$['val']")
+        assertEquals("foo", prim(d.oldValue, "old").asString)
+        assertEquals("bar", prim(d.newValue, "new").asString)
+    }
+
+    @Test
+    fun `identical strings produce no diff`() {
+        val d = diff("a.json", """{"val": "foo"}""", """{"val": "foo"}""")
+        assertFalse(d.containsKey("\$['val']"), "Identical strings must produce no diff")
+    }
+
+    @Test
+    fun `boolean change is reported as Changed`() {
+        val d = changed(diff("a.json", """{"val": true}""", """{"val": false}"""), "\$['val']")
+        assertEquals("true",  prim(d.oldValue, "old").asString)
+        assertEquals("false", prim(d.newValue, "new").asString)
+    }
+
+    // ── OptionDiff.New and OptionDiff.Deleted ─────────────────────────────────
+
+    @Test
+    fun `new key appears as OptionDiff_New`() {
+        val d = diff("a.json", """{}""", """{"x": 1}""")
+        val entry = d["\$['x']"]
+        assertNotNull(entry, "New key must appear in the diff")
+        assertInstanceOf(OptionDiff.New::class.java, entry,
+            "Expected OptionDiff.New, got ${entry?.javaClass?.simpleName}")
+        assertEquals("1", prim((entry as OptionDiff.New).newValue, "new").asString)
+    }
+
+    @Test
+    fun `deleted key appears as OptionDiff_Deleted`() {
+        val d = diff("a.json", """{"x": 1}""", """{}""")
+        val entry = d["\$['x']"]
+        assertNotNull(entry, "Deleted key must appear in the diff")
+        assertInstanceOf(OptionDiff.Deleted::class.java, entry,
+            "Expected OptionDiff.Deleted, got ${entry?.javaClass?.simpleName}")
+        assertEquals("1", prim((entry as OptionDiff.Deleted).oldValue, "old").asString)
+    }
+
+    // ── FlatContentDiff direct: rationalize and hasLeaf ───────────────────────
+
+    @Test
+    fun `rationalize removes leaf entries under a Deleted parent`() {
+        val d = FlatContentDiff("f.json")
+        d.addDeleted("\$['parent']", null)
+        d.addDeleted("\$['parent']['child']", null)
+        d.rationalize()
+        assertTrue(d.containsKey("\$['parent']"),          "Parent deleted entry must be retained")
+        assertFalse(d.containsKey("\$['parent']['child']"), "Child of deleted parent must be pruned by rationalize")
+    }
+
+    @Test
+    fun `hasLeaf returns true when direct children exist under path`() {
+        val d = FlatContentDiff("f.json")
+        d.addNew("\$['obj']['key']", null)
+        assertTrue(d.hasLeaf("\$['obj']"), "hasLeaf must be true when children exist under path")
+    }
+
+    @Test
+    fun `hasLeaf returns false for a path with no children`() {
+        val d = FlatContentDiff("f.json")
+        d.addNew("\$['leaf']", null)
+        assertFalse(d.hasLeaf("\$['leaf']"), "hasLeaf must be false for a leaf with no children")
     }
 }

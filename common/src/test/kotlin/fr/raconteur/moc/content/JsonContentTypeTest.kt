@@ -1,9 +1,8 @@
-package fr.raconteur.moc.content_type_read_write
+package fr.raconteur.moc.content
 
 import de.marhali.json5.Json5Array
 import de.marhali.json5.Json5Object
 import de.marhali.json5.Json5Primitive
-import fr.raconteur.moc.content.FlatContent
 import fr.raconteur.moc.filesystem.MocFileSystem
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.Assertions.*
@@ -271,7 +270,6 @@ class JsonContentTypeTest {
         }
         file.setContent(newRoot)
 
-        // Re-scan the filesystem so MocFile is re-read from disk
         val fs2 = MocFileSystem(tempDir)
         val file2 = fs2.files.first { it.getFileName() == "rw.json" }
         val flat = file2.getFlatContent() ?: fail("getFlatContent() returned null after setContent")
