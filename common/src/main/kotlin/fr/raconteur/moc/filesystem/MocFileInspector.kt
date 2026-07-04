@@ -22,15 +22,49 @@ internal object MocFileInspector {
         val buffer = ByteArray(8000)
         val read = Files.newInputStream(path).use { it.read(buffer) }
         if (read <= 0) return false
-        return buffer.take(read).any { it == 0.toByte() }
+        if (hasMultiByteBOM(buffer, read)) return false
+        if (!buffer.take(read).any { it == 0.toByte() }) return false
+        return inferUtf16Encoding(buffer, read) == null
+    }
+
+    // Returns "UTF-16BE", "UTF-16LE", or null if the buffer doesn't look like UTF-16.
+    // Heuristic: if >90% of null bytes are consistently at even or odd positions,
+    // the content is likely UTF-16 (Latin chars occupy one byte, the other is 0x00).
+    private fun inferUtf16Encoding(buffer: ByteArray, read: Int): String? {
+        val nullCount = (0 until read).count { buffer[it] == 0.toByte() }
+        if (nullCount < 4) return null
+        val evenNulls = (0 until read step 2).count { buffer[it] == 0.toByte() }
+        val oddNulls = nullCount - evenNulls
+        if (maxOf(evenNulls, oddNulls).toDouble() / nullCount <= 0.90) return null
+        return if (evenNulls > oddNulls) "UTF-16BE" else "UTF-16LE"
+    }
+
+    private fun hasMultiByteBOM(buffer: ByteArray, read: Int): Boolean {
+        if (read >= 4
+            && buffer[0] == 0x00.toByte() && buffer[1] == 0x00.toByte()
+            && buffer[2] == 0xFE.toByte() && buffer[3] == 0xFF.toByte()) return true // UTF-32BE
+        if (read >= 4
+            && buffer[0] == 0xFF.toByte() && buffer[1] == 0xFE.toByte()
+            && buffer[2] == 0x00.toByte() && buffer[3] == 0x00.toByte()) return true // UTF-32LE
+        if (read >= 2
+            && buffer[0] == 0xFE.toByte() && buffer[1] == 0xFF.toByte()) return true // UTF-16BE
+        if (read >= 2
+            && buffer[0] == 0xFF.toByte() && buffer[1] == 0xFE.toByte()) return true // UTF-16LE
+        return false
     }
 
     fun detectEncoding(path: Path): String {
-        if (isBinary(path)) throw IllegalArgumentException("File appears to be binary: $path")
         detectBOM(path)?.let { return it }
-        val data = Files.readAllBytes(path)
         val detected = UniversalDetector.detectCharset(path)
         if (detected != null) return detected
+        val buffer = ByteArray(8000)
+        val read = Files.newInputStream(path).use { it.read(buffer) }
+        if (read > 0) {
+            inferUtf16Encoding(buffer, read)?.let { return it }
+            if (buffer.take(read).any { it == 0.toByte() })
+                throw IllegalArgumentException("File appears to be binary: $path")
+        }
+        val data = Files.readAllBytes(path)
         try {
             StandardCharsets.UTF_8.newDecoder()
                 .onMalformedInput(CodingErrorAction.REPORT)
