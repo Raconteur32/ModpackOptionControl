@@ -19,6 +19,7 @@ object McInstanceRefMocFileSystem : MocFileSystem(
 
         applyMultiplePatches(
             PatchList.getAll(),
+            forceOverride = true,
             onError = { patchName, e -> PlatformService.INSTANCE.logError("[moc] Failed to regenerate ref for patch '$patchName': ${e.message}", e) }
         )
     }

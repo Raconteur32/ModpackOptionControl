@@ -52,7 +52,7 @@ open class MocFileSystem(
             val refPath = metasDir.resolve("ref")
             refPath.toFile().deleteRecursively()
             val newRef = MocFileSystem(refPath)
-            newRef.applyMultiplePatches(_appliedPatches.map { it.patch }, onError = onRefError)
+            newRef.applyMultiplePatches(_appliedPatches.map { it.patch }, forceOverride = true, onError = onRefError)
             ref = newRef
         }
     }
@@ -167,7 +167,10 @@ open class MocFileSystem(
     private fun matchesRef(entry: PatchEntry, refDiff: FileSystemDiff?): Boolean {
         if (refDiff == null) return false
         val fileDiff = refDiff[Path.of(entry.filePath)] ?: return true
-        return !fileDiff.flatContentDiff.containsKey(entry.optionPath)
+        return if (entry.kind == EntryKind.DELETION && entry.optionPath == "")
+            fileDiff.flatContentDiff.isEmpty()
+        else
+            !fileDiff.flatContentDiff.containsKey(entry.optionPath)
     }
 
     private fun entryExists(entry: PatchEntry): Boolean {
@@ -284,17 +287,18 @@ open class MocFileSystem(
         val applied = appliedPatches.map { it.patch }.toSet()
         val toApply = PatchList.getAll().filter { it !in applied }
         if (toApply.isEmpty()) return
-        applyMultiplePatches(toApply, onApplied, onError)
+        applyMultiplePatches(toApply, onApplied = onApplied, onError = onError)
     }
 
     fun applyMultiplePatches(
         patches: List<String>,
+        forceOverride: Boolean = false,
         onApplied: (patchName: String) -> Unit = {},
         onError:   (patchName: String, e: Exception) -> Unit = { _, _ -> }
     ) {
         for (patchName in patches) {
             try {
-                applyPatch(Patch.load(patchName))
+                applyPatch(Patch.load(patchName), forceOverride)
                 onApplied(patchName)
             } catch (e: Exception) {
                 onError(patchName, e)
