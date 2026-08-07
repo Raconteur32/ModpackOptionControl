@@ -216,4 +216,53 @@ class DraftPatchWorkflowTest {
             targetDir.toFile().deleteRecursively()
         }
     }
+
+    // ── Test: round-trip of a patch capturing an emptied pinned-json file ─────
+
+    @Test
+    fun `patch capturing an emptied file records effective type text and applies as a genuinely empty file`() {
+        // Live file pinned json (loaded while valid), then emptied; ref keeps the old content.
+        gameFile("emptied.json", """{"a": 1, "b": {"c": "x"}}""")
+        McInstanceMocFileSystem.reload()
+        gameFile("emptied.json", "")
+        refFile("emptied.json", """{"a": 1, "b": {"c": "x"}}""")
+
+        val diff = reloadAndDiff()
+        val flat = diff[Path.of("emptied.json")]!!.flatContentDiff
+        val rootChange = flat["$"] as? OptionDiff.Changed
+            ?: error("emptied file must diff at the root, got: ${flat.keys}")
+        assertEquals("", (rootChange.newValue as Json5Primitive).asString)
+
+        DraftPatch.setValueEntry(rootChange, PatchMode.OVERRIDE)
+        DraftPatch.finalize("empty-patch")
+
+        // The patch declares the effective capture type, not the stale json pin.
+        val meta = Patch.load("empty-patch").metadata["emptied.json"]
+        assertEquals("text", meta?.get("content"), "mocmeta must record the effective content type")
+
+        // Round-trip: applying on a fresh instance produces a genuinely empty file,
+        // not the two-character JSON literal "".
+        val targetDir = Files.createTempDirectory("moc-target-")
+        try {
+            targetDir.resolve("emptied.json").toFile().writeText("""{"a": 1, "b": {"c": "x"}}""")
+            val targetFs = MocFileSystem(targetDir)
+            targetFs.applyPatch(Patch.load("empty-patch"), forceOverride = true)
+
+            assertEquals("", targetDir.resolve("emptied.json").toFile().readText(),
+                "applied file must be genuinely empty")
+
+            // No residual diff: replay the patch as the reference and compare.
+            val replayDir = Files.createTempDirectory("moc-replay-")
+            try {
+                val replayFs = MocFileSystem(replayDir)
+                replayFs.applyPatch(Patch.load("empty-patch"), forceOverride = true)
+                val residual = MocFileSystem(targetDir).diffFrom(replayFs)
+                assertTrue(residual.isEmpty(), "no residual diff after applying the patch, got: ${residual.keys}")
+            } finally {
+                replayDir.toFile().deleteRecursively()
+            }
+        } finally {
+            targetDir.toFile().deleteRecursively()
+        }
+    }
 }

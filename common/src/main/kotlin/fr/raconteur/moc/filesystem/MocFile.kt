@@ -100,10 +100,23 @@ class MocFile private constructor(
 
     fun setContent(content: Json5Element) = contentType.setContent(this, content)
 
+    // The content type that actually produced the last flat-content read — the pinned
+    // [contentType], or TextContentType when the raw-content fallback was used.
+    // This is the single place the fallback condition exists; consumers (e.g. patch
+    // finalization) read the recorded fact via [effectiveContentType] instead of
+    // re-deriving it.
+    private var computedEffectiveType: ContentType? = null
+
     fun getFlatContent(): FlatContent? {
         if (!exists) return null
-        return contentType.getFlatContent(this)
+        contentType.getFlatContent(this)
+            ?.also { computedEffectiveType = contentType; return it }
+        return TextContentType.getFlatContent(this)
+            ?.also { computedEffectiveType = TextContentType }
     }
+
+    fun effectiveContentType(): ContentType =
+        computedEffectiveType ?: contentType.also { getFlatContent() }
 
     fun diffFrom(other: MocFile): FlatContentDiff {
         val diff = FlatContentDiff(relativePath.toString())

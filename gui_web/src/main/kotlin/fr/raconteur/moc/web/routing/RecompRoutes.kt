@@ -152,7 +152,7 @@ fun Routing.recompRoutes() {
         val tree = if (fileDiff.kind == FileDiffKind.DELETED)
             buildDeletedFileTree(fileDiff.flatContentDiff, resolveAction, unresolvedForFile, sourceMap)
         else
-            DiffTreeBuilder.buildChildren(fileDiff.flatContentDiff, "$", resolveAction, unresolvedForFile, sourceMap)
+            DiffTreeBuilder.buildTree(fileDiff.flatContentDiff, resolveAction, unresolvedForFile, sourceMap)
 
         call.respond(mapOf("file" to summary, "tree" to tree))
     }

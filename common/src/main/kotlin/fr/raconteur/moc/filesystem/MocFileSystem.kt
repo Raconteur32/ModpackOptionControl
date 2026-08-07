@@ -64,6 +64,18 @@ open class MocFileSystem(
     internal fun getFileMetadata(relativePath: Path): Map<String, String>? =
         allMetadata[relativePath.toString()]
 
+    // Stored metadata for the given files with `content` replaced by each file's
+    // effectiveContentType() when they differ (text when values were captured through
+    // the raw-content fallback). Used when authoring patches so a patch declares the
+    // type under which its values were actually captured. Pure reader of the cached
+    // effective type — no re-inference here.
+    fun effectiveMetadataFor(filePaths: Set<String>): Map<String, Map<String, String>> =
+        filePaths.mapNotNull { fp -> getFileMetadata(Path.of(fp))?.let { fp to it } }.toMap()
+            .mapValues { (fp, meta) ->
+                val eff = _files[Path.of(fp)]?.effectiveContentType()?.id
+                if (eff != null && eff != meta["content"]) meta + ("content" to eff) else meta
+            }
+
     internal fun register(file: MocFile) {
         _files[file.relativePath] = file
         registerMetadata(file)

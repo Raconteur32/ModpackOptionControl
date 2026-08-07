@@ -66,7 +66,7 @@ fun Routing.diffRoutes() {
         val tree = if (fileDiff.kind == FileDiffKind.DELETED)
             buildDeletedFileTree(fileDiff.flatContentDiff, resolveActionFor(filePath, fileDiff.flatContentDiff))
         else
-            DiffTreeBuilder.buildChildren(fileDiff.flatContentDiff, "$", resolveActionFor(filePath, fileDiff.flatContentDiff))
+            DiffTreeBuilder.buildTree(fileDiff.flatContentDiff, resolveActionFor(filePath, fileDiff.flatContentDiff))
 
         call.respond(mapOf("file" to summary, "tree" to tree))
     }

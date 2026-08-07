@@ -1,7 +1,6 @@
 package fr.raconteur.moc.gui
 
 import com.google.gson.GsonBuilder
-import com.google.gson.reflect.TypeToken
 import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.platform.PlatformService
@@ -127,11 +126,7 @@ object DraftPatch {
         dir.resolve("patch.json").writeText(_entries.toJson5String())
 
         val patchFilePaths = _entries.map { it.filePath }.toSet()
-        val metaType = object : TypeToken<Map<String, Map<String, String>>>() {}.type
-        val allMeta: Map<String, Map<String, String>> = try {
-            gson.fromJson(McInstanceMocFileSystem.getMetadataFile().toFile().readText(), metaType) ?: emptyMap()
-        } catch (_: Exception) { emptyMap() }
-        val filteredMeta = allMeta.filter { (key, _) -> key in patchFilePaths }
+        val filteredMeta = McInstanceMocFileSystem.effectiveMetadataFor(patchFilePaths)
         dir.resolve("mocmeta.json").writeText(gson.toJson(filteredMeta))
 
         clear()
@@ -146,11 +141,7 @@ object DraftPatch {
         dir.resolve("patch.json").toFile().writeText(_entries.toJson5String())
 
         val patchFilePaths = _entries.map { it.filePath }.toSet()
-        val metaType = object : TypeToken<Map<String, Map<String, String>>>() {}.type
-        val allMeta: Map<String, Map<String, String>> = try {
-            gson.fromJson(McInstanceMocFileSystem.getMetadataFile().toFile().readText(), metaType) ?: emptyMap()
-        } catch (_: Exception) { emptyMap() }
-        val filteredMeta = allMeta.filter { (key, _) -> key in patchFilePaths }
+        val filteredMeta = McInstanceMocFileSystem.effectiveMetadataFor(patchFilePaths)
         dir.resolve("mocmeta.json").toFile().writeText(gson.toJson(filteredMeta))
 
         val patch = Patch(patchName, _entries.toList(), filteredMeta)

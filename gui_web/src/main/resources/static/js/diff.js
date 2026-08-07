@@ -60,6 +60,7 @@ function kindBadge(kind) {
 
 function fmtValue(v, raw) {
     if (v === null || v === undefined) return '<i>null</i>';
+    if (v === '') return '<i>""</i>'; // empty string must stay visible (e.g. emptied file)
     if (raw) return escapeHtml(JSON.stringify(v));
     if (typeof v === 'string') return escapeHtml(v);
     if (typeof v === 'object') return escapeHtml(JSON.stringify(v));
@@ -86,8 +87,11 @@ function renderNode(node, depth, filePath) {
     const raw = uiState.rawNodes.has(key);
     const partial = node.hasChildren ? partialStagedCount(filePath, node.path) : 0;
 
-    const valueHtml = !node.hasChildren ? renderValue(node, raw) : '';
-    const rawToggle = !node.hasChildren && node.kind === 'CHANGED'
+    // The root node ("$") may carry an atomic replacement (e.g. object → "")
+    // AND deleted children at once — its value must stay visible even then.
+    const isRoot = node.path === '$';
+    const valueHtml = (!node.hasChildren || isRoot) ? renderValue(node, raw) : '';
+    const rawToggle = (!node.hasChildren || isRoot) && node.kind === 'CHANGED'
         ? `<span class="raw-toggle ${raw ? 'active' : ''}" data-raw-toggle="${escapeHtml(key)}">RAW</span>` : '';
 
     const dropdown = renderActionDropdown({

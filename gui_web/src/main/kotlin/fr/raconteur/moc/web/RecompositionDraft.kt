@@ -248,15 +248,12 @@ object RecompositionDraft {
         tempDir.mkdirs()
         tempDir.resolve("patch.json").writeText(_entries.toJson5String())
 
-        // Collect file-type metadata from the afterFS metadata file
-        val metaType = object : com.google.gson.reflect.TypeToken<Map<String, Map<String, String>>>() {}.type
-        val metaFile = afterPath.resolve("mocfsmetas/mocmetadata.json").toFile()
-        val allMeta: Map<String, Map<String, String>> = try {
-            if (metaFile.exists()) gson.fromJson(metaFile.readText(), metaType) ?: emptyMap()
-            else emptyMap()
-        } catch (_: Exception) { emptyMap() }
+        // Collect file-type metadata from the after state, with the effective content
+        // type for files captured through the raw-content fallback. afterFS is a
+        // session-start local; the sandbox is static during the session, so rebuilding
+        // a filesystem over it is exact.
         val patchFilePaths = _entries.map { it.filePath }.toSet()
-        val filteredMeta = allMeta.filter { it.key in patchFilePaths }
+        val filteredMeta = MocFileSystem(afterPath).effectiveMetadataFor(patchFilePaths)
         tempDir.resolve("mocmeta.json").writeText(gson.toJson(filteredMeta))
 
         // Update active patch list: replace range with the new patch

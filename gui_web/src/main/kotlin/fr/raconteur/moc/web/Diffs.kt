@@ -1,6 +1,7 @@
 package fr.raconteur.moc.web
 
 import de.marhali.json5.Json5Element
+import de.marhali.json5.Json5Object
 import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.FileDiffKind
 import fr.raconteur.moc.filesystem.MocFileDiff
@@ -45,7 +46,7 @@ fun extractLabel(path: String): String {
         .replace("\\\\", "\\")
 }
 
-private fun optionDiffKind(optDiff: OptionDiff?): String = when (optDiff) {
+internal fun optionDiffKind(optDiff: OptionDiff?): String = when (optDiff) {
     is OptionDiff.New     -> "NEW"
     is OptionDiff.Deleted -> "DELETED"
     is OptionDiff.Changed -> "CHANGED"
@@ -68,6 +69,29 @@ object DiffTreeBuilder {
         }
     }
 
+    // Builds the full per-file tree. The diff engine records a Changed entry at "$"
+    // for ANY leaf change beneath an object root (container summary) — that is not a
+    // root change of its own. The root is returned as a regular node only for atomic
+    // root replacements: the new root value is a scalar, an array, or an empty/raw
+    // string (i.e. not an object). Otherwise the tree exposes only the children of
+    // "$" and no synthetic root row is added.
+    //
+    // An atomic root replacement is displayed as a SINGLE node: the Deleted records
+    // of former children stay in the flat diff (they drive DEFAULT-deletion matching
+    // at apply time) but are redundant with the root replacement on screen.
+    fun buildTree(
+        flatDiff: Map<String, OptionDiff>,
+        resolveAction: (path: String) -> Pair<String?, String?>,
+        unresolved: Set<String> = emptySet(),
+        sourceMap: Map<String, String> = emptyMap()
+    ): List<DiffNode> {
+        val children = buildChildren(flatDiff, "$", resolveAction, unresolved, sourceMap)
+        val rootDiff = flatDiff["$"] ?: return children
+        if (rootDiff.newValue is Json5Object) return children
+        // Atomic root replacement → buildNode applies the no-children rule itself.
+        return listOf(buildNode(flatDiff, "$", resolveAction, unresolved, sourceMap))
+    }
+
     private fun buildNode(
         flatDiff: Map<String, OptionDiff>,
         path: String,
@@ -76,7 +100,12 @@ object DiffTreeBuilder {
         sourceMap: Map<String, String>
     ): DiffNode {
         val optDiff  = flatDiff[path]
-        val children = buildChildren(flatDiff, path, resolveAction, unresolved, sourceMap)
+        // An atomic replacement (Changed to a non-object value) makes every former
+        // child implicitly deleted: the Deleted records stay in the flat diff (they
+        // drive DEFAULT-deletion matching at apply time) but are not displayed.
+        val isAtomicReplacement = optDiff is OptionDiff.Changed && optDiff.newValue !is Json5Object
+        val children = if (isAtomicReplacement) emptyList()
+                       else buildChildren(flatDiff, path, resolveAction, unresolved, sourceMap)
         val (action, ignoreKind) = resolveAction(path)
         return DiffNode(
             path        = path,
