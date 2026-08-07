@@ -52,3 +52,6 @@ replay_*.log
 
 # node
 node_modules/
+
+# openspec capability directory named "build" (matched by the build/ rule above)
+!openspec/specs/build/
