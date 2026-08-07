@@ -55,3 +55,8 @@ node_modules/
 
 # openspec capability directory named "build" (matched by the build/ rule above)
 !openspec/specs/build/
+
+# local agent tooling
+.claude/
+.mcp.json
+.opencode/
