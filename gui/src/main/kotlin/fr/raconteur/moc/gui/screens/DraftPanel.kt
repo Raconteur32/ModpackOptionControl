@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
 import fr.raconteur.moc.gui.AppState
 import fr.raconteur.moc.gui.FocusedPanel
 import fr.raconteur.moc.gui.components.DraftBadge
-import fr.raconteur.moc.versioning.DraftPatch
+import fr.raconteur.moc.gui.DraftPatch
 import fr.raconteur.moc.versioning.PatchMode
 
 @Composable

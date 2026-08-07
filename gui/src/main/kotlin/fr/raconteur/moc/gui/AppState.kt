@@ -6,12 +6,9 @@ import androidx.compose.runtime.setValue
 import fr.raconteur.moc.MocSettings
 import fr.raconteur.moc.filesystem.FileDiffKind
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
-import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.filesystem.MocFileDiff
-import fr.raconteur.moc.filesystem.applyDiffToDraft
 import fr.raconteur.moc.filesystem.directChildren
 import fr.raconteur.moc.filesystem.isDescendant
-import fr.raconteur.moc.versioning.DraftPatch
 import fr.raconteur.moc.versioning.PatchEntry
 import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.PatchMode

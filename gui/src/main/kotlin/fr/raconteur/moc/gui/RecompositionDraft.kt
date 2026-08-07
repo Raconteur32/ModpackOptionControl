@@ -1,16 +1,25 @@
-package fr.raconteur.moc.versioning
+package fr.raconteur.moc.gui
 
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
-import com.google.gson.reflect.TypeToken
 import fr.raconteur.moc.content.OptionDiff
-import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.filesystem.MocFileDiff
 import fr.raconteur.moc.filesystem.MocFileSystem
 import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.platform.PlatformService
+import fr.raconteur.moc.versioning.EntryKind
+import fr.raconteur.moc.versioning.Patch
+import fr.raconteur.moc.versioning.PatchEntry
+import fr.raconteur.moc.versioning.PatchList
+import fr.raconteur.moc.versioning.PatchMode
+import fr.raconteur.moc.versioning.json5ToNative
+import fr.raconteur.moc.versioning.parsePatchEntries
+import fr.raconteur.moc.versioning.toJson5String
 import java.nio.file.Path
 
+// Gui-module copy of the recomposition session state (extracted from common; frozen — gui is deprecated in favor of gui_web; see
+// openspec/changes/extract-authoring-from-common). Reads/writes the same on-disk
+// state as the desktop gui's copy so both tools stay interchangeable on an instance.
 object RecompositionDraft {
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
@@ -32,6 +41,13 @@ object RecompositionDraft {
 
     private val _entries: MutableList<PatchEntry> = mutableListOf()
     val entries: List<PatchEntry> get() = _entries
+
+    private val _conflictingEntries: MutableSet<Pair<String, String>> = mutableSetOf()
+    val conflictingEntries: Set<Pair<String, String>> get() = _conflictingEntries.toSet()
+
+    // Maps (filePath to optionPath) → source patch name for auto-populated entries
+    private val _sourceMap: MutableMap<Pair<String, String>, String> = mutableMapOf()
+    val sourceMap: Map<Pair<String, String>, String> get() = _sourceMap
 
     var cachedDiff: List<Map.Entry<Path, MocFileDiff>> = emptyList()
         private set
@@ -85,20 +101,27 @@ object RecompositionDraft {
         val end   = rangeEnd   ?: return
         val allPatches = PatchList.getAll()
 
-        // Collect all entries from every patch in the range (+ amend patch if applicable)
-        val rangeEntries: List<PatchEntry> = buildList {
-            allPatches.subList(start, end + 1).forEach { addAll(Patch.load(it).entries) }
-            if (isAmend && amendPath.toFile().exists())
-                addAll(Patch.loadFromDir(amendPath, "amend").entries)
+        // Collect all entries from every patch in the range (+ amend patch if applicable),
+        // tracking the source patch name for each entry
+        val rangeEntries: List<Pair<String, PatchEntry>> = buildList {
+            allPatches.subList(start, end + 1).forEach { patchName ->
+                Patch.load(patchName).entries.forEach { add(patchName to it) }
+            }
+            if (isAmend && amendPath.toFile().exists()) {
+                Patch.loadFromDir(amendPath, "amend").entries.forEach { add("amend" to it) }
+            }
         }
 
         // Mark as conflicting any pair that shares the same file and overlaps with another
-        val conflicting = mutableSetOf<Pair<String, String>>()
+        _conflictingEntries.clear()
+        val conflicting = _conflictingEntries
         for (i in rangeEntries.indices) {
-            val (fp1, op1) = rangeEntries[i].filePath to rangeEntries[i].optionPath
+            val (_, entry1) = rangeEntries[i]
+            val (fp1, op1)  = entry1.filePath to entry1.optionPath
             for (j in rangeEntries.indices) {
                 if (i == j) continue
-                val (fp2, op2) = rangeEntries[j].filePath to rangeEntries[j].optionPath
+                val (_, entry2) = rangeEntries[j]
+                val (fp2, op2)  = entry2.filePath to entry2.optionPath
                 if (fp1 != fp2) continue
                 if (op1 == op2 || isDescendant(op1, op2) || isDescendant(op2, op1)) {
                     conflicting.add(fp1 to op1)
@@ -109,13 +132,19 @@ object RecompositionDraft {
 
         // Auto-populate draft with non-conflicting entries, using the net diff value
         // and preserving the original mode from the patch entry
+        _sourceMap.clear()
         val diffMap = cachedDiff.associate { it.key.toString() to it.value }
         val seen    = mutableSetOf<Pair<String, String>>()
-        for (entry in rangeEntries) {
+        for ((sourceName, entry) in rangeEntries) {
             val key = entry.filePath to entry.optionPath
             if (key in conflicting || !seen.add(key)) continue
             val optDiff = diffMap[entry.filePath]?.flatContentDiff?.get(entry.optionPath) ?: continue
+            // applyDiff() -> setValueEntry()/setDeletionEntry() removes any existing
+            // _sourceMap entry for this key as a side effect (correct for manual staging,
+            // where a freshly-staged entry has no patch provenance) — so it must run
+            // BEFORE recording the source here, not after, or the source is immediately wiped.
             applyDiff(optDiff, entry.mode)
+            _sourceMap[key] = sourceName
         }
     }
 
@@ -145,25 +174,37 @@ object RecompositionDraft {
 
     fun setValueEntry(filePath: String, optionPath: String, fromValue: Any?, toValue: Any?, mode: PatchMode) {
         val entry = PatchEntry(filePath, optionPath, json5ToNative(fromValue), json5ToNative(toValue), EntryKind.VALUE, mode)
+        val key   = filePath to optionPath
         _entries.removeIf { it.filePath == filePath && it.optionPath == optionPath }
+        _sourceMap.remove(key)
         _entries.add(entry)
         save()
     }
 
     fun setDeletionEntry(filePath: String, optionPath: String, oldValue: Any?, mode: PatchMode) {
         val entry = PatchEntry(filePath, optionPath, json5ToNative(oldValue), null, EntryKind.DELETION, mode)
+        val key   = filePath to optionPath
         _entries.removeIf { it.filePath == filePath && it.optionPath == optionPath }
+        _sourceMap.remove(key)
         _entries.add(entry)
         save()
     }
 
     fun removeEntry(filePath: String, optionPath: String) {
         _entries.removeIf { it.filePath == filePath && it.optionPath == optionPath }
+        _sourceMap.remove(filePath to optionPath)
         save()
     }
 
     fun entryFor(filePath: String, optionPath: String): PatchEntry? =
         _entries.find { it.filePath == filePath && it.optionPath == optionPath }
+
+    // Marks an inter-patch conflict as resolved (either by staging one of the options
+    // manually or by ignoring it for this recomposition session). No persistence needed:
+    // conflictingEntries/sourceMap are rebuilt from scratch on every build()/rebuildDiff().
+    fun resolveConflict(filePath: String, optionPath: String) {
+        _conflictingEntries.remove(filePath to optionPath)
+    }
 
     fun clear() {
         val wasAmend = isAmend
@@ -171,6 +212,8 @@ object RecompositionDraft {
         rangeEnd     = null
         isAmend      = false
         _entries.clear()
+        _conflictingEntries.clear()
+        _sourceMap.clear()
         cachedDiff = emptyList()
         draftPath.toFile().delete()
         beforePath.toFile().deleteRecursively()
@@ -182,16 +225,16 @@ object RecompositionDraft {
         val start = rangeStart ?: error("No active recomposition")
         val end   = rangeEnd   ?: error("No active recomposition")
 
-        val patchsRoot = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs")
+        val patchesRoot = PatchList.patchesRoot()
 
         // Write to a temp dir so range deletion (which may include patchName) can't clobber the new patch
-        val tempDir = patchsRoot.resolve("temp-$patchName").toFile()
+        val tempDir = patchesRoot.resolve("temp-$patchName").toFile()
         tempDir.deleteRecursively()
         tempDir.mkdirs()
         tempDir.resolve("patch.json").writeText(_entries.toJson5String())
 
         // Collect file-type metadata from the afterFS metadata file
-        val metaType = object : TypeToken<Map<String, Map<String, String>>>() {}.type
+        val metaType = object : com.google.gson.reflect.TypeToken<Map<String, Map<String, String>>>() {}.type
         val metaFile = afterPath.resolve("mocfsmetas/mocmetadata.json").toFile()
         val allMeta: Map<String, Map<String, String>> = try {
             if (metaFile.exists()) gson.fromJson(metaFile.readText(), metaType) ?: emptyMap()
@@ -217,7 +260,7 @@ object RecompositionDraft {
         }
 
         // Rename temp dir to final name now that the range is gone
-        tempDir.renameTo(patchsRoot.resolve(patchName).toFile())
+        tempDir.renameTo(patchesRoot.resolve(patchName).toFile())
 
         McInstanceRefMocFileSystem.regenerateRefFiles()
 

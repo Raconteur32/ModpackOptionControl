@@ -22,7 +22,7 @@ import androidx.compose.ui.unit.sp
 import fr.raconteur.moc.gui.PatchesState
 import fr.raconteur.moc.gui.RecompFocusedPanel
 import fr.raconteur.moc.gui.components.DraftBadge
-import fr.raconteur.moc.versioning.RecompositionDraft
+import fr.raconteur.moc.gui.RecompositionDraft
 import fr.raconteur.moc.versioning.PatchMode
 
 @Composable

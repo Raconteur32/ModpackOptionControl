@@ -11,7 +11,6 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import fr.raconteur.moc.MocMigration
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
-import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.platform.PlatformService
 import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.PatchMode

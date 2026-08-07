@@ -25,7 +25,7 @@ class PatchListDeletionTest {
     }
 
     private fun createFakePatch(name: String) {
-        val dir = platform.getConfigDir().resolve("moc/patchs/$name").toFile()
+        val dir = platform.getConfigDir().resolve("moc/patches/$name").toFile()
         dir.mkdirs()
         dir.resolve("patch.json").writeText("[]")
         PatchList.add(name)
@@ -50,7 +50,7 @@ class PatchListDeletionTest {
     @Test
     fun `delete removes patch folder from disk`() {
         createFakePatch("p1")
-        val dir = platform.getConfigDir().resolve("moc/patchs/p1").toFile()
+        val dir = platform.getConfigDir().resolve("moc/patches/p1").toFile()
         assertTrue(dir.exists())
         PatchList.delete("p1")
         assertFalse(dir.exists())
@@ -60,7 +60,7 @@ class PatchListDeletionTest {
     fun `runStartupCleanup deletes folders listed in deleted-patch-list`() {
         // Simulate a patch that was deleted on the server side:
         // folder exists on disk but patch was added to deleted list (not in active list)
-        val dir = platform.getConfigDir().resolve("moc/patchs/orphan").toFile()
+        val dir = platform.getConfigDir().resolve("moc/patches/orphan").toFile()
         dir.mkdirs()
         dir.resolve("patch.json").writeText("[]")
         PatchList.addToDeleted("orphan")

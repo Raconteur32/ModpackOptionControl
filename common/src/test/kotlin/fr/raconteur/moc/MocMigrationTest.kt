@@ -95,11 +95,47 @@ class MocMigrationTest {
 
     @Test
     fun `patch dot-mocmeta_json is renamed to mocmeta_json`() {
-        val patchDir = configDir.resolve("moc/patchs/my-patch").toFile()
+        val patchDir = configDir.resolve("moc/patches/my-patch").toFile()
         patchDir.mkdirs()
         patchDir.resolve(".mocmeta.json").writeText("{}")
         MocMigration.migrate()
         assertFalse(patchDir.resolve(".mocmeta.json").exists(), "Old .mocmeta.json must be removed")
         assertTrue(patchDir.resolve("mocmeta.json").exists(),   "New mocmeta.json must exist")
+    }
+
+    // ── legacy patchs/ directory → patches/ ───────────────────────────────────
+
+    @Test
+    fun `legacy patchs directory is renamed to patches with contents intact`() {
+        val legacyDir = configDir.resolve("moc/patchs/my-patch").toFile()
+        legacyDir.mkdirs()
+        legacyDir.resolve("patch.json").writeText("[]")
+        MocMigration.migrate()
+        assertFalse(configDir.resolve("moc/patchs").toFile().exists(), "Legacy directory must be removed")
+        assertTrue(configDir.resolve("moc/patches/my-patch/patch.json").toFile().exists(),
+            "Patch folder must survive the rename")
+    }
+
+    @Test
+    fun `patchs rename is idempotent`() {
+        val legacyDir = configDir.resolve("moc/patchs/my-patch").toFile()
+        legacyDir.mkdirs()
+        legacyDir.resolve("patch.json").writeText("[]")
+        MocMigration.migrate()
+        assertDoesNotThrow { MocMigration.migrate() }
+        assertTrue(configDir.resolve("moc/patches/my-patch/patch.json").toFile().exists())
+    }
+
+    @Test
+    fun `both patchs and patches present leaves both untouched`() {
+        val legacyDir = configDir.resolve("moc/patchs/old-patch").toFile()
+        legacyDir.mkdirs()
+        legacyDir.resolve("patch.json").writeText("""[{"marker":"legacy"}]""")
+        val currentDir = configDir.resolve("moc/patches/new-patch").toFile()
+        currentDir.mkdirs()
+        currentDir.resolve("patch.json").writeText("""[{"marker":"current"}]""")
+        MocMigration.migrate()
+        assertTrue(legacyDir.resolve("patch.json").exists(),  "Legacy directory must not be removed when destination exists")
+        assertTrue(currentDir.resolve("patch.json").exists(), "Current directory must not be overwritten")
     }
 }

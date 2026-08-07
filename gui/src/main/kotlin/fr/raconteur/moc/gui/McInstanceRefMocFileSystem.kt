@@ -1,9 +1,14 @@
-package fr.raconteur.moc.filesystem
+package fr.raconteur.moc.gui
 
 import fr.raconteur.moc.MocSettings
+import fr.raconteur.moc.filesystem.MocFileSystem
 import fr.raconteur.moc.platform.PlatformService
 import fr.raconteur.moc.versioning.PatchList
 
+// Gui-module copy of the dev reference filesystem (extracted from common; see
+// openspec/changes/extract-authoring-from-common). Frozen behavior: regenerates
+// unconditionally at startup. gui is deprecated in favor of gui_web, whose copy
+// regenerates only when its fingerprint detects staleness.
 object McInstanceRefMocFileSystem : MocFileSystem(
     rootPath     = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/ref"),
     ignoredPaths = MocSettings.ignoredPaths,

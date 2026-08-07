@@ -13,7 +13,7 @@ import androidx.compose.ui.window.Dialog
 import fr.raconteur.moc.gui.AppState
 import fr.raconteur.moc.gui.IgnoreStore
 import fr.raconteur.moc.gui.Screen
-import fr.raconteur.moc.versioning.DraftPatch
+import fr.raconteur.moc.gui.DraftPatch
 import fr.raconteur.moc.versioning.PatchList
 
 @Composable

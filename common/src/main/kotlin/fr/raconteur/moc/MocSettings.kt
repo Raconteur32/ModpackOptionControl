@@ -31,7 +31,7 @@ object MocSettings {
         }
     }
 
-    // MutableList so that McInstanceMocFileSystem / McInstanceRefMocFileSystem,
+    // MutableList so that McInstanceMocFileSystem and the dev-ref filesystems,
     // which capture this reference at construction time, see in-place additions.
     private val _ignoredPaths: MutableList<Path> by lazy {
         _data.getAsJsonArray("ignored_paths")

@@ -31,7 +31,7 @@ fun parsePatchEntries(text: String): List<PatchEntry> {
     }
 }
 
-internal fun json5ToNative(value: Any?): Any? = when (value) {
+fun json5ToNative(value: Any?): Any? = when (value) {
     is Json5Element -> when {
         value.isJson5Null      -> null
         value.isJson5Primitive -> value.asJson5Primitive.let { p ->

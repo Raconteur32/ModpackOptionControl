@@ -13,7 +13,7 @@ import androidx.compose.ui.window.Dialog
 import fr.raconteur.moc.gui.IgnoreStore
 import fr.raconteur.moc.gui.PatchesState
 import fr.raconteur.moc.versioning.PatchList
-import fr.raconteur.moc.versioning.RecompositionDraft
+import fr.raconteur.moc.gui.RecompositionDraft
 
 @Composable
 fun AmendFinalizeDialog(state: PatchesState) {

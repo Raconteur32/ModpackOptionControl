@@ -8,9 +8,13 @@ import java.nio.file.Path
 object PatchList {
     private val gson = GsonBuilder().setPrettyPrinting().create()
 
+    /** Name of the directory under `config/moc/` holding one folder per patch. Single source of truth. */
+    const val PATCHES_DIR_NAME = "patches"
+
     private fun path(): Path = PlatformService.INSTANCE.getConfigDir().resolve("moc/patch-list.json")
     private fun deletedPath(): Path = PlatformService.INSTANCE.getConfigDir().resolve("moc/deleted-patch-list.json")
-    internal fun patchDir(name: String) = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$name").toFile()
+    fun patchesRoot(): Path = PlatformService.INSTANCE.getConfigDir().resolve("moc/$PATCHES_DIR_NAME")
+    internal fun patchDir(name: String) = patchesRoot().resolve(name).toFile()
 
     fun getAll(): List<String> {
         val file = path().toFile()
@@ -58,7 +62,7 @@ object PatchList {
         getAllDeleted().forEach { patchDir(it).deleteRecursively() }
     }
 
-    internal fun addToDeleted(patchName: String) {
+    fun addToDeleted(patchName: String) {
         val names = getAllDeleted().toMutableList()
         if (!names.contains(patchName)) {
             names.add(patchName)
@@ -68,7 +72,7 @@ object PatchList {
         }
     }
 
-    internal fun deleteFolder(patchName: String) {
+    fun deleteFolder(patchName: String) {
         patchDir(patchName).deleteRecursively()
     }
 

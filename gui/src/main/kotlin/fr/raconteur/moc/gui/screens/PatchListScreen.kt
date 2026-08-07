@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fr.raconteur.moc.gui.PatchesState
 import fr.raconteur.moc.gui.PatchesView
-import fr.raconteur.moc.versioning.RecompositionDraft
+import fr.raconteur.moc.gui.RecompositionDraft
 
 @Composable
 fun PatchListScreen(state: PatchesState) {

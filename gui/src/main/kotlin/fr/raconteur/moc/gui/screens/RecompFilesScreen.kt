@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fr.raconteur.moc.filesystem.FileDiffKind
 import fr.raconteur.moc.filesystem.isDescendant
+import fr.raconteur.moc.gui.RecompositionDraft
 import fr.raconteur.moc.gui.PatchesState
 import fr.raconteur.moc.gui.RecompFocusedPanel
 import fr.raconteur.moc.gui.Screen
@@ -37,8 +38,8 @@ fun RecompFilesScreen(state: PatchesState) {
     val entries      = state.recompEntries
     val draftEntries = state.recompDraftEntries
     val listState    = rememberLazyListState()
-    val rangeStart   = fr.raconteur.moc.versioning.RecompositionDraft.rangeStart
-    val rangeEnd     = fr.raconteur.moc.versioning.RecompositionDraft.rangeEnd
+    val rangeStart   = RecompositionDraft.rangeStart
+    val rangeEnd     = RecompositionDraft.rangeEnd
     val allPatches   = fr.raconteur.moc.versioning.PatchList.getAll()
 
     LaunchedEffect(state.recompFileIndex) {

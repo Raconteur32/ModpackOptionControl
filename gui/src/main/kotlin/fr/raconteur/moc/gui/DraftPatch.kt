@@ -1,13 +1,23 @@
-package fr.raconteur.moc.versioning
+package fr.raconteur.moc.gui
 
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
-import fr.raconteur.moc.filesystem.McInstanceRefMocFileSystem
 import fr.raconteur.moc.platform.PlatformService
+import fr.raconteur.moc.versioning.EntryKind
+import fr.raconteur.moc.versioning.Patch
+import fr.raconteur.moc.versioning.PatchEntry
+import fr.raconteur.moc.versioning.PatchList
+import fr.raconteur.moc.versioning.PatchMode
+import fr.raconteur.moc.versioning.json5ToNative
+import fr.raconteur.moc.versioning.parsePatchEntries
+import fr.raconteur.moc.versioning.toJson5String
 import java.nio.file.Path
 
+// Gui-module copy of the draft patch staging area (extracted from common; frozen — gui is deprecated in favor of gui_web; see
+// openspec/changes/extract-authoring-from-common). Reads/writes the same on-disk
+// state as the desktop gui's copy so both tools stay interchangeable on an instance.
 object DraftPatch {
     private val gson = GsonBuilder().setPrettyPrinting().create()
     private val draftPath: Path
@@ -81,6 +91,17 @@ object DraftPatch {
         save()
     }
 
+    fun removeEntriesForFile(filePath: String) {
+        _entries.removeIf { it.filePath == filePath }
+        save()
+    }
+
+    fun removeEntriesUnder(dir: String) {
+        val prefix = if (dir.endsWith("/")) dir else "$dir/"
+        _entries.removeIf { it.filePath.startsWith(prefix) }
+        save()
+    }
+
     fun save() {
         val file = draftPath.toFile()
         file.parentFile.mkdirs()
@@ -119,7 +140,7 @@ object DraftPatch {
 
     fun finalize(patchName: String): Patch {
         require(!PatchList.contains(patchName)) { "Patch « $patchName » already exists" }
-        val dir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName")
+        val dir = PatchList.patchesRoot().resolve(patchName)
         dir.toFile().mkdirs()
 
         dir.resolve("patch.json").toFile().writeText(_entries.toJson5String())

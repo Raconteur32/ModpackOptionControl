@@ -1,6 +1,7 @@
 package fr.raconteur.moc
 
 import fr.raconteur.moc.platform.PlatformService
+import fr.raconteur.moc.versioning.PatchList
 import java.nio.file.Path
 
 object MocMigration {
@@ -8,8 +9,12 @@ object MocMigration {
         migrateFileSystem(PlatformService.INSTANCE.getGameDir())
         migrateFileSystem(PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/ref"))
 
-        val patchsDir = PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs")
-        patchsDir.toFile().listFiles()
+        val configDir = PlatformService.INSTANCE.getConfigDir()
+        // Legacy misspelled patch directory → current name
+        moveLegacyDir(configDir.resolve("moc/patchs"), configDir.resolve("moc/${PatchList.PATCHES_DIR_NAME}"))
+
+        val patchesDir = configDir.resolve("moc/${PatchList.PATCHES_DIR_NAME}")
+        patchesDir.toFile().listFiles()
             ?.filter { it.isDirectory }
             ?.forEach { renameLegacy(it.toPath().resolve(".mocmeta.json"), it.toPath().resolve("mocmeta.json")) }
     }

@@ -10,7 +10,6 @@ import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.versioning.PatchEntry
 import fr.raconteur.moc.versioning.PatchList
 import fr.raconteur.moc.versioning.PatchMode
-import fr.raconteur.moc.versioning.RecompositionDraft
 import java.nio.file.Path
 
 enum class PatchesView { List, Content, Recomposition }

@@ -1,9 +1,5 @@
 package fr.raconteur.moc.filesystem
 
-import fr.raconteur.moc.content.OptionDiff
-import fr.raconteur.moc.versioning.DraftPatch
-import fr.raconteur.moc.versioning.PatchMode
-
 fun directChildren(allPaths: List<String>, parent: String): List<String> =
     allPaths.filter { path ->
         if (path == parent || !path.startsWith(parent)) return@filter false
@@ -20,11 +16,4 @@ fun isDescendant(childPath: String, parentPath: String): Boolean {
     if (!childPath.startsWith(parentPath)) return false
     val c = childPath[parentPath.length]
     return c == '.' || c == '['
-}
-
-fun applyDiffToDraft(optDiff: OptionDiff?, mode: PatchMode) = when (optDiff) {
-    is OptionDiff.New     -> DraftPatch.setValueEntry(optDiff, mode)
-    is OptionDiff.Changed -> DraftPatch.setValueEntry(optDiff, mode)
-    is OptionDiff.Deleted -> DraftPatch.setDeletionEntry(optDiff, mode)
-    null                  -> Unit
 }

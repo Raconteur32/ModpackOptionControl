@@ -14,7 +14,7 @@ class Patch(
         private val gson = GsonBuilder().setPrettyPrinting().create()
 
         fun load(patchName: String): Patch =
-            loadFromDir(PlatformService.INSTANCE.getConfigDir().resolve("moc/patchs/$patchName"), patchName)
+            loadFromDir(PatchList.patchesRoot().resolve(patchName), patchName)
 
         fun loadFromZip(zipPath: java.nio.file.Path, name: String = zipPath.fileName.toString().removeSuffix(".zip")): Patch {
             val metaType = object : TypeToken<Map<String, Map<String, String>>>() {}.type
