@@ -15,6 +15,7 @@ fun main() {
 
     MocMigration.migrate()
     PatchList.runStartupCleanup()
+    IgnoreStore.pruneRedundant()
     McInstanceMocFileSystem.applyPending(
         onError = { patchName, e -> PlatformService.INSTANCE.logError("[moc] Failed to apply pending patch '$patchName': ${e.message}", e) }
     )
