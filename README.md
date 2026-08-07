@@ -75,4 +75,4 @@ MOC includes a standalone GUI tool for authoring patches. It connects to your lo
 
 ## License
 
-This project is licensed under the [LGPL-3.0-only](https://www.gnu.org/licenses/lgpl-3.0.html) license.
+This project is licensed under the [GPL-3.0-only](https://www.gnu.org/licenses/gpl-3.0.html) license.

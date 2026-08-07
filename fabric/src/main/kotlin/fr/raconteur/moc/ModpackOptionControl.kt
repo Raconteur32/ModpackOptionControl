@@ -10,6 +10,6 @@ object ModpackOptionControl : ModInitializer {
 
     override fun onInitialize() {
         PlatformService.INSTANCE = FabricPlatformService
-        logger.info("Hello Fabric world!")
+        logger.info("Modpack Option Control initialized")
     }
 }

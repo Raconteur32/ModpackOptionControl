@@ -3,16 +3,16 @@
 	"id": "moc",
 	"version": "${version}",
 	"name": "Modpack Option Control",
-	"description": "An mod allowing atomic option management for modpack makers",
+	"description": "A mod allowing atomic option management for modpack makers",
 	"authors": [
 		"Raconteur"
 	],
 	"contact": {
-		"homepage": "https://modrinth.com/mod/simpleskinswapper",
+		"homepage": "https://modrinth.com/mod/moc",
 		"sources": "https://github.com/Raconteur32/ModpackOptionControl",
 		"issues": "https://github.com/Raconteur32/ModpackOptionControl/issues"
 	},
-	"license": "CC0-1.0",
+	"license": "GPL-3.0-only",
 	"icon": "assets/moc/icon.png",
 	"environment": "*",
 	"entrypoints": {
@@ -29,9 +29,6 @@
 			}
 		]
 	},
-	"mixins": [
-		"moc.mixins.json"
-	],
 	"depends": {
 		"fabricloader": ">=0.19.2",
 		"minecraft": ">=26.1.2-",
