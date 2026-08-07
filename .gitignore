@@ -49,3 +49,6 @@ replay_*.log
 *.hprof
 *.jfr
 .kotlin/
+
+# node
+node_modules/

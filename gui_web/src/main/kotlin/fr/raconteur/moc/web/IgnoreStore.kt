@@ -1,0 +1,166 @@
+package fr.raconteur.moc.web
+
+import com.google.gson.GsonBuilder
+import com.google.gson.annotations.SerializedName
+import fr.raconteur.moc.MocSettings
+import fr.raconteur.moc.filesystem.MocFileDiff
+import fr.raconteur.moc.filesystem.isDescendant
+import fr.raconteur.moc.platform.PlatformService
+import java.nio.file.Path
+
+enum class IgnoreKind { SESSION, VALUE, PERMANENT, DIRECTORY }
+
+data class IgnoreEntry(
+    @SerializedName("file_path")    val filePath: String,
+    @SerializedName("option_path")  val optionPath: String,
+    @SerializedName("target_value") val targetValue: String? = null
+)
+
+private data class EditorData(
+    @SerializedName("session_ignores")       val sessionIgnores: List<IgnoreEntry> = emptyList(),
+    @SerializedName("value_ignores")         val valueIgnores: List<IgnoreEntry> = emptyList(),
+    @SerializedName("permanent_ignores")     val permanentIgnores: List<IgnoreEntry> = emptyList(),
+    @SerializedName("recomposition_ignores") val recompositionIgnores: List<IgnoreEntry> = emptyList()
+)
+
+// Web-module equivalent of gui's IgnoreStore. Kept as an independent copy (rather than
+// promoted to `common`) since it is not shared code — mirrors the decision to duplicate
+// TestPlatformService instead of touching common's build configuration.
+object IgnoreStore {
+    private val gson = GsonBuilder().setPrettyPrinting().create()
+    private val editorPath: Path
+        get() = PlatformService.INSTANCE.getConfigDir().resolve("moc/dev/editor.json")
+
+    private val _sessionIgnores       = mutableListOf<IgnoreEntry>()
+    private val _valueIgnores         = mutableListOf<IgnoreEntry>()
+    private val _permanentIgnores     = mutableListOf<IgnoreEntry>()
+    private val _recompositionIgnores = mutableListOf<IgnoreEntry>()
+
+    val sessionIgnores:       List<IgnoreEntry> get() = _sessionIgnores.toList()
+    val valueIgnores:         List<IgnoreEntry> get() = _valueIgnores.toList()
+    val permanentIgnores:     List<IgnoreEntry> get() = _permanentIgnores.toList()
+    val recompositionIgnores: List<IgnoreEntry> get() = _recompositionIgnores.toList()
+
+    init { load() }
+
+    fun reset() {
+        _sessionIgnores.clear()
+        _valueIgnores.clear()
+        _permanentIgnores.clear()
+        _recompositionIgnores.clear()
+        load()
+    }
+
+    fun add(entry: IgnoreEntry, kind: IgnoreKind) {
+        listFor(kind).apply {
+            removeIf { it.filePath == entry.filePath && it.optionPath == entry.optionPath }
+            add(entry)
+        }
+        save()
+    }
+
+    fun remove(filePath: String, optionPath: String, kind: IgnoreKind) {
+        listFor(kind).removeIf { it.filePath == filePath && it.optionPath == optionPath }
+        save()
+    }
+
+    fun resetSession() { _sessionIgnores.clear(); save() }
+
+    fun addRecomp(entry: IgnoreEntry) {
+        _recompositionIgnores.removeIf { it.filePath == entry.filePath && it.optionPath == entry.optionPath }
+        _recompositionIgnores.add(entry)
+        save()
+    }
+
+    fun removeRecomp(filePath: String, optionPath: String) {
+        _recompositionIgnores.removeIf { it.filePath == filePath && it.optionPath == optionPath }
+        save()
+    }
+
+    fun clearRecompIgnores() { _recompositionIgnores.clear(); save() }
+
+    fun isIgnoredForRecomp(filePath: String, optionPath: String): Boolean =
+        _recompositionIgnores.any { it.filePath == filePath && it.optionPath == optionPath }
+
+    fun pruneRedundant() {
+        val ignoredDirs = MocSettings.ignoredPaths
+
+        fun isUnderIgnoredDir(e: IgnoreEntry) =
+            ignoredDirs.any { dir -> Path.of(e.filePath).startsWith(dir) }
+
+        fun isCoveredByPermanent(e: IgnoreEntry) =
+            _permanentIgnores.any { p -> p.filePath == e.filePath && isDescendant(e.optionPath, p.optionPath) }
+
+        fun isCoveredBySessionOrValue(e: IgnoreEntry) =
+            (_sessionIgnores + _valueIgnores).any { p -> p.filePath == e.filePath && isDescendant(e.optionPath, p.optionPath) }
+
+        fun MutableList<IgnoreEntry>.prune(predicate: (IgnoreEntry) -> Boolean): Boolean {
+            val before = size; removeIf(predicate); return size != before
+        }
+
+        var changed = false
+        // R1: under a filesystem-ignored directory
+        changed = _sessionIgnores.prune   { isUnderIgnoredDir(it) } or changed
+        changed = _valueIgnores.prune     { isUnderIgnoredDir(it) } or changed
+        changed = _permanentIgnores.prune { isUnderIgnoredDir(it) } or changed
+        // R2: permanent parent covers all 3 kinds
+        changed = _sessionIgnores.prune   { isCoveredByPermanent(it) } or changed
+        changed = _valueIgnores.prune     { isCoveredByPermanent(it) } or changed
+        changed = _permanentIgnores.prune { isCoveredByPermanent(it) } or changed
+        // R3: session/value parent covers session + value
+        changed = _sessionIgnores.prune { isCoveredBySessionOrValue(it) } or changed
+        changed = _valueIgnores.prune   { isCoveredBySessionOrValue(it) } or changed
+
+        if (changed) save()
+    }
+
+    // Removes VALUE ignores whose targetValue no longer matches the current diff's
+    // newValue for that option — i.e. the value moved on again since the ignore was set.
+    // Called explicitly by diff routes, separate from the diff computation itself.
+    fun pruneStaleValueIgnores(rawDiff: Map<Path, MocFileDiff>) {
+        val stale = _valueIgnores.filter { ignore ->
+            val fileDiff = rawDiff[Path.of(ignore.filePath)] ?: return@filter false
+            val optDiff  = fileDiff.flatContentDiff[ignore.optionPath] ?: return@filter false
+            !matchesTargetValue(optDiff.newValue, ignore.targetValue)
+        }
+        if (stale.isNotEmpty()) {
+            stale.forEach { _valueIgnores.remove(it) }
+            save()
+        }
+    }
+
+    fun isIgnored(filePath: String, optionPath: String, newValue: Any?): Boolean {
+        if (_sessionIgnores.any   { it.filePath == filePath && it.optionPath == optionPath }) return true
+        if (_permanentIgnores.any { it.filePath == filePath && it.optionPath == optionPath }) return true
+        val newStr = newValue?.toString()
+        return _valueIgnores.any { it.filePath == filePath && it.optionPath == optionPath && it.targetValue == newStr }
+    }
+
+    private fun listFor(kind: IgnoreKind): MutableList<IgnoreEntry> = when (kind) {
+        IgnoreKind.SESSION   -> _sessionIgnores
+        IgnoreKind.VALUE     -> _valueIgnores
+        IgnoreKind.PERMANENT -> _permanentIgnores
+        IgnoreKind.DIRECTORY -> error("Directory ignores are not stored in IgnoreStore")
+    }
+
+    private fun load() {
+        val file = editorPath.toFile()
+        if (!file.exists()) return
+        val data = try { gson.fromJson(file.readText(), EditorData::class.java) } catch (_: Exception) { return }
+        data?.sessionIgnores?.forEach       { _sessionIgnores.add(it) }
+        data?.valueIgnores?.forEach         { _valueIgnores.add(it) }
+        data?.permanentIgnores?.forEach     { _permanentIgnores.add(it) }
+        data?.recompositionIgnores?.forEach { _recompositionIgnores.add(it) }
+    }
+
+    private fun save() {
+        val file = editorPath.toFile()
+        file.parentFile.mkdirs()
+        file.writeText(gson.toJson(EditorData(
+            _sessionIgnores.toList(),
+            _valueIgnores.toList(),
+            _permanentIgnores.toList(),
+            _recompositionIgnores.toList()
+        )))
+    }
+}

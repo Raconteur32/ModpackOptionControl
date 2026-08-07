@@ -1,0 +1,488 @@
+/* ---------- Generic panel header ---------- */
+
+.panel-header {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+/* ---------- Kind badges (design §5) ---------- */
+
+.kind-badge {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.kind-badge--new     { color: var(--kind-new);     background: var(--kind-new-bg); }
+.kind-badge--deleted { color: var(--kind-deleted); background: var(--kind-deleted-bg); }
+.kind-badge--changed { color: var(--kind-changed); background: var(--kind-changed-bg); }
+
+/* ---------- Unresolved badge (design §6) ---------- */
+
+.unresolved-badge {
+  color: var(--warning);
+  background: var(--warning-bg);
+  border: 1px solid var(--warning);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+/* ---------- App mode badge (design §7) ---------- */
+
+.app-mode-badge--amend {
+  color: var(--mode-amend);
+  background: var(--mode-amend-bg);
+  border: 1px solid var(--mode-amend);
+}
+.app-mode-badge--recomp {
+  color: var(--mode-recomp);
+  background: var(--mode-recomp-bg);
+  border: 1px solid var(--mode-recomp);
+}
+
+/* ---------- Selectable rows (file tree / main area / staging / history) (design §8) ---------- */
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px var(--space-2);
+  cursor: default;
+  border-left: 2px solid transparent;
+}
+.row:hover { background: var(--bg-2); }
+.row.selected { background: var(--accent-bg); border-left-color: var(--accent); }
+.row.ignored-greyed .row-label,
+.row.ignored-greyed .diff-node-label { color: var(--text-muted); text-decoration: line-through; }
+
+.row-checkbox { flex-shrink: 0; visibility: hidden; }
+.row:hover .row-checkbox, .row.selected .row-checkbox, .row-checkbox:checked { visibility: visible; }
+.row-checkbox:checked { visibility: visible; }
+
+/* ---------- Small buttons ---------- */
+
+.btn {
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.btn:hover { background: var(--bg-2); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.btn-primary { background: var(--accent); color: var(--text-on-accent); border-color: var(--accent); }
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+.btn-secondary { background: transparent; border: 1px solid var(--border-strong); color: var(--text-primary); }
+
+.btn-danger { background: var(--danger); color: var(--text-on-accent); border-color: var(--danger); }
+.btn-danger:hover:not(:disabled) { background: var(--danger-hover); }
+
+.btn-icon {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--text-base);
+  padding: 0 4px;
+  line-height: 1;
+}
+.btn-icon:hover { color: var(--text-primary); }
+
+/* ---------- Unified action dropdown (design §4) ---------- */
+
+.action-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.action-dropdown-btn {
+  display: inline-block;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+  min-width: 56px;
+  min-height: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  background: var(--mode-empty);
+}
+.action-dropdown-btn.mode-DEFAULT  { color: var(--mode-default);  background: var(--mode-default-bg); }
+.action-dropdown-btn.mode-OVERRIDE { color: var(--mode-override); background: var(--mode-override-bg); }
+.action-dropdown-btn.mode-IGNORE   { color: var(--mode-ignore);   background: var(--mode-ignore-bg); }
+.action-dropdown-btn.mode-MIXED    { color: var(--text-muted); }
+.action-dropdown-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.action-dropdown-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 2px);
+  background: var(--bg-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dropdown);
+  min-width: 100px;
+  z-index: 40;
+  overflow: hidden;
+}
+.action-dropdown-menu .opt {
+  padding: 6px 10px;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.action-dropdown-menu .opt:hover { background: var(--bg-2); }
+.action-dropdown-menu .opt.DEFAULT  { color: var(--mode-default); }
+.action-dropdown-menu .opt.OVERRIDE { color: var(--mode-override); }
+.action-dropdown-menu .opt.IGNORE   { color: var(--mode-ignore); }
+
+/* ---------- Dialogs (design §9) ---------- */
+
+.dialog-overlay {
+  background: var(--bg-overlay);
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 200;
+}
+.dialog {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-popup);
+  padding: var(--space-6);
+  min-width: 420px;
+  max-width: 560px;
+}
+.dialog h2 { margin: 0 0 var(--space-4) 0; font-family: var(--font-ui); font-size: var(--text-md); color: var(--text-primary); }
+.dialog p { margin: var(--space-2) 0; color: var(--text-secondary); font-size: var(--text-base); }
+.dialog .dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-4); }
+.dialog label { display: block; font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-1); }
+.dialog input[type=text] {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+}
+.dialog .meta { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-muted); margin-top: var(--space-2); }
+
+.effect-list { margin: var(--space-3) 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.effect-item { font-size: var(--text-base); }
+.effect-item .effect-title { color: var(--warning); font-family: var(--font-mono); }
+.effect-item .effect-detail { color: var(--text-secondary); padding-left: 18px; font-size: var(--text-sm); }
+
+/* ---------- Irreversible deletion popup (design §9, flow §10) ---------- */
+
+.delete-list { margin: var(--space-3) 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.delete-item { font-family: var(--font-mono); font-size: var(--text-sm); color: var(--text-primary); }
+
+/* ---------- Popover (design §11) ---------- */
+
+.popover {
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-dropdown);
+  padding: var(--space-3);
+  min-width: 320px;
+  position: absolute;
+  z-index: 50;
+}
+
+/* ---------- Ignores topbar area (flow §9) ---------- */
+
+#ignores-area {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ignores-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.ignores-popover {
+  top: calc(100% + 4px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-height: 320px;
+}
+
+.ignores-popover-controls {
+  display: flex;
+  gap: var(--space-2);
+}
+.ignores-popover-controls input[type=text] {
+  flex: 1;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.ignores-popover-controls select {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.ignores-popover-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.ignores-popover-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ignore-entry-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px 0;
+  font-size: var(--text-sm);
+}
+.ignore-entry-kind {
+  color: var(--mode-ignore);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  flex-shrink: 0;
+}
+.ignore-entry-path {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ---------- Ignore-type popup (design §9, flow §9) ---------- */
+
+.ignore-type-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: var(--space-3) 0;
+}
+.ignore-type-opt {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.ignore-type-opt .opt-detail {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+#ignore-value-input {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  margin-bottom: var(--space-2);
+}
+
+/* ---------- Bulk action bar (design §10) ---------- */
+
+.bulk-action-bar {
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-2) var(--space-3);
+  display: flex; align-items: center; gap: var(--space-3);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+/* ---------- File tree ---------- */
+
+#file-tree .dir-header {
+  display: flex; align-items: center; gap: var(--space-1);
+  padding: 3px var(--space-2);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  user-select: none;
+}
+#file-tree .dir-header:hover { background: var(--bg-2); }
+#file-tree .dir-children.collapsed { display: none; }
+#file-tree .file-row { padding-left: var(--space-3); }
+#file-tree .file-row .row-label {
+  flex: 1;
+  min-width: 32px;
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: pointer;
+}
+#file-tree .file-row.active .row-label { color: var(--accent); }
+#file-tree .file-row.ignored-hard .row-label { color: var(--text-muted); text-decoration: line-through; }
+#file-tree .staged-badge {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ---------- Main area diff tree ---------- */
+
+#main-area .file-header {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+}
+
+#diff-tree { flex: 1; overflow-y: auto; padding: var(--space-2) 0; }
+
+/* ---------- Read-only patch view (flow §10 [View]) ---------- */
+
+#main-area .readonly-tag { font-size: var(--text-xs); color: var(--text-muted); font-weight: 400; }
+.patch-view-row .entry-file { font-family: var(--font-mono); color: var(--text-secondary); flex-shrink: 0; }
+.patch-view-row .entry-path { font-family: var(--font-mono); color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.diff-node { }
+.diff-node > .row { padding-left: calc(var(--space-2) + var(--depth) * 16px); }
+.diff-node-expand {
+  width: 14px; flex-shrink: 0;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+.diff-node-expand.leaf { visibility: hidden; }
+
+.diff-node-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.diff-node-value {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  flex: 1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.diff-node-value .old { color: var(--kind-deleted); text-decoration: line-through; }
+.diff-node-value .arrow { color: var(--text-muted); margin: 0 4px; }
+.diff-node-value .new { color: var(--kind-new); }
+
+.partial-badge {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  background: var(--bg-2);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+}
+
+.raw-toggle {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.raw-toggle.active { color: var(--accent); border-color: var(--accent); }
+
+.empty-state {
+  padding: var(--space-6);
+  color: var(--text-muted);
+  font-size: var(--text-base);
+  text-align: center;
+}
+
+/* ---------- Staging panel ---------- */
+
+#staging-panel .staging-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  gap: var(--space-3);
+}
+#staging-panel .staging-title { font-size: var(--text-sm); color: var(--text-secondary); font-weight: 600; }
+#staging-panel .staging-actions { display: flex; gap: var(--space-2); }
+#staging-list { flex: 1; overflow-y: auto; }
+#staging-list .row-label { font-family: var(--font-mono); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+#staging-list .source-tag { font-family: var(--font-ui); font-size: var(--text-xs); color: var(--text-muted); white-space: nowrap; }
+
+/* ---------- Patch history ---------- */
+
+#patch-history .history-header {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+#patch-history .history-mode-label { font-size: var(--text-sm); color: var(--text-secondary); }
+.patch-row .row-label { font-family: var(--font-mono); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.patch-row .bullet { color: var(--text-muted); flex-shrink: 0; }
+.patch-row .entry-count-badge {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  background: var(--bg-2);
+  border-radius: var(--radius-sm);
+  padding: 0 5px;
+  flex-shrink: 0;
+}
+.patch-row .amend-in-progress-tag {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  font-style: italic;
+  flex-shrink: 0;
+}
+.patch-row.in-range {
+  background: var(--mode-recomp-bg);
+  border-left: 2px solid var(--mode-recomp);
+}
+.patch-row.in-range.selected {
+  background: var(--accent-bg);
+}
+#patch-history .history-header .btn { margin-top: var(--space-2); width: 100%; }

@@ -19,4 +19,4 @@ pluginManagement {
 
 rootProject.name = "moc"
 
-include("common", "fabric", "gui")
+include("common", "fabric", "gui", "gui_web")

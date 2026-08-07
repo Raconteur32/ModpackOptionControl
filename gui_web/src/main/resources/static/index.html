@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MOC</title>
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/layout.css">
+<link rel="stylesheet" href="/css/components.css">
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div class="logo">MOC <span>&#9679;</span></div>
+    <div id="app-mode-badge"></div>
+    <div id="breadcrumb"></div>
+    <div id="topbar-right">
+      <div id="ignores-area"></div>
+      <button id="topbar-settings" class="btn-icon" title="Not implemented" disabled>&#9881;</button>
+    </div>
+  </div>
+
+  <div id="body">
+    <div id="main-columns">
+      <div id="file-tree">
+        <div class="panel-header">Files</div>
+        <div id="file-tree-list"></div>
+      </div>
+      <div class="sep-v" id="sep-filetree"></div>
+
+      <div id="main-area">
+        <div id="main-area-content"></div>
+      </div>
+
+      <div class="sep-v" id="sep-history"></div>
+      <div id="patch-history">
+        <div class="panel-header">Patch History</div>
+        <div id="history-list"></div>
+      </div>
+    </div>
+
+    <div class="sep-h" id="sep-staging"></div>
+
+    <div id="staging-panel">
+      <div class="staging-header">
+        <span class="staging-title" id="staging-title">STAGING — 0 entries</span>
+        <div class="staging-actions" id="staging-actions"></div>
+      </div>
+      <div id="staging-list"></div>
+    </div>
+  </div>
+</div>
+
+<div id="dialog-root"></div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>
