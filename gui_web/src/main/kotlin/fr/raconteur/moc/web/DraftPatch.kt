@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
 import fr.raconteur.moc.content.OptionDiff
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
+import fr.raconteur.moc.filesystem.isDescendant
 import fr.raconteur.moc.platform.PlatformService
 import fr.raconteur.moc.versioning.EntryKind
 import fr.raconteur.moc.versioning.Patch
@@ -72,8 +73,19 @@ object DraftPatch {
     fun setValueEntry(diff: OptionDiff.Changed, mode: PatchMode) =
         setValueEntry(diff.filePath, diff.path, diff.oldValue, diff.newValue, mode)
 
+    // No-overlap invariant: staging a path replaces staged ancestors and descendants in
+    // the same file (the file-deletion marker "" never overlaps — delete-then-recreate
+    // compositions stay possible). Server-side so it holds for any client, atomically.
+    private fun removeOverlapping(filePath: String, optionPath: String) {
+        _entries.removeIf {
+            it.filePath == filePath && it.optionPath != optionPath &&
+                (isDescendant(it.optionPath, optionPath) || isDescendant(optionPath, it.optionPath))
+        }
+    }
+
     private fun setValueEntry(filePath: String, optionPath: String, fromValue: Any?, toValue: Any?, mode: PatchMode) {
         val entry = PatchEntry(filePath, optionPath, json5ToNative(fromValue), json5ToNative(toValue), EntryKind.VALUE, mode)
+        removeOverlapping(entry.filePath, entry.optionPath)
         _entries.removeIf { it.filePath == entry.filePath && it.optionPath == entry.optionPath }
         _entries.add(entry)
         save()
@@ -81,6 +93,7 @@ object DraftPatch {
 
     fun setDeletionEntry(diff: OptionDiff.Deleted, mode: PatchMode) {
         val entry = PatchEntry(diff.filePath, diff.path, json5ToNative(diff.oldValue), null, EntryKind.DELETION, mode)
+        removeOverlapping(entry.filePath, entry.optionPath)
         _entries.removeIf { it.filePath == entry.filePath && it.optionPath == entry.optionPath }
         _entries.add(entry)
         save()

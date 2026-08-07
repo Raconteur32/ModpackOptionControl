@@ -208,6 +208,62 @@ class DraftRoutesTest : WebTestBase() {
         assertEquals(1, IgnoreStore.sessionIgnores.size)
     }
 
+    // ── Server-side overlap invariant (no frontend pre-removal involved) ──────
+
+    private suspend fun stage(client: io.ktor.client.HttpClient, filePath: String, optionPath: String, mode: String) =
+        client.post("/api/draft/entries") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"filePath":"$filePath","optionPath":"$optionPath","mode":"$mode"}""")
+        }
+
+    @Test
+    fun `POST draft entries staging a child replaces the staged parent`() = webTest { client ->
+        gameFile("opts.json", """{"a": {"b": 42, "c": 7}}""")
+        refFile ("opts.json", """{"a": {"b": 1,  "c": 1}}""")
+        McInstanceMocFileSystem.reload()
+
+        stage(client, "opts.json", "$['a']", "OVERRIDE")
+        assertEquals(listOf("$['a']"), DraftPatch.entries.map { it.optionPath })
+
+        stage(client, "opts.json", "$['a']['b']", "DEFAULT")
+        assertEquals(listOf("$['a']['b']"), DraftPatch.entries.map { it.optionPath },
+            "staging a child must replace the staged parent")
+    }
+
+    @Test
+    fun `POST draft entries staging a parent replaces staged descendants`() = webTest { client ->
+        gameFile("opts.json", """{"a": {"b": 42, "c": 7}}""")
+        refFile ("opts.json", """{"a": {"b": 1,  "c": 1}}""")
+        McInstanceMocFileSystem.reload()
+
+        stage(client, "opts.json", "$['a']['b']", "OVERRIDE")
+        stage(client, "opts.json", "$['a']['c']", "OVERRIDE")
+        assertEquals(2, DraftPatch.entries.size)
+
+        stage(client, "opts.json", "$['a']", "DEFAULT")
+        assertEquals(listOf("$['a']"), DraftPatch.entries.map { it.optionPath },
+            "staging a parent must replace staged descendants")
+    }
+
+    @Test
+    fun `POST draft entries keeps other files untouched and restages exact key in place`() = webTest { client ->
+        gameFile("opts.json",  """{"a": {"b": 42}}""")
+        refFile ("opts.json",  """{"a": {"b": 1}}""")
+        gameFile("other.json", """{"x": 9}""")
+        refFile ("other.json", """{"x": 1}""")
+        McInstanceMocFileSystem.reload()
+
+        stage(client, "other.json", "$['x']", "OVERRIDE")
+        stage(client, "opts.json", "$['a']", "OVERRIDE")
+        assertEquals(2, DraftPatch.entries.size, "entry in another file must remain")
+
+        stage(client, "opts.json", "$['a']", "DEFAULT")
+        assertEquals(2, DraftPatch.entries.size, "exact-key restage must not duplicate")
+        assertEquals(fr.raconteur.moc.versioning.PatchMode.DEFAULT,
+            DraftPatch.entries.first { it.filePath == "opts.json" }.mode,
+            "exact-key restage must update the mode in place")
+    }
+
     @Test
     fun `POST draft finalize-for-amend returns 400 when no patches exist`() = webTest { client ->
         gameFile("opts.json", """{"x": 42}""")

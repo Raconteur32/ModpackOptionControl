@@ -172,9 +172,23 @@ object RecompositionDraft {
         null                  -> Unit
     }
 
+    // No-overlap invariant (see DraftPatch): staging replaces staged ancestors and
+    // descendants in the same file; their auto-population provenance goes with them.
+    private fun removeOverlapping(filePath: String, optionPath: String) {
+        _entries.removeIf {
+            it.filePath == filePath && it.optionPath != optionPath &&
+                (isDescendant(it.optionPath, optionPath) || isDescendant(optionPath, it.optionPath))
+        }
+        _sourceMap.keys.removeIf { (fp, op) ->
+            fp == filePath && op != optionPath &&
+                (isDescendant(op, optionPath) || isDescendant(optionPath, op))
+        }
+    }
+
     fun setValueEntry(filePath: String, optionPath: String, fromValue: Any?, toValue: Any?, mode: PatchMode) {
         val entry = PatchEntry(filePath, optionPath, json5ToNative(fromValue), json5ToNative(toValue), EntryKind.VALUE, mode)
         val key   = filePath to optionPath
+        removeOverlapping(filePath, optionPath)
         _entries.removeIf { it.filePath == filePath && it.optionPath == optionPath }
         _sourceMap.remove(key)
         _entries.add(entry)
@@ -184,6 +198,7 @@ object RecompositionDraft {
     fun setDeletionEntry(filePath: String, optionPath: String, oldValue: Any?, mode: PatchMode) {
         val entry = PatchEntry(filePath, optionPath, json5ToNative(oldValue), null, EntryKind.DELETION, mode)
         val key   = filePath to optionPath
+        removeOverlapping(filePath, optionPath)
         _entries.removeIf { it.filePath == filePath && it.optionPath == optionPath }
         _sourceMap.remove(key)
         _entries.add(entry)

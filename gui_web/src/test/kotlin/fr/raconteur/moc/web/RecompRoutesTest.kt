@@ -260,6 +260,40 @@ class RecompRoutesTest : WebTestBase() {
         assertEquals(0, IgnoreStore.recompositionIgnores.size)
     }
 
+    // Staging an ancestor of an auto-populated entry replaces it and drops its
+    // provenance — the overlap invariant is enforced server-side.
+    @Test
+    fun `POST recomp entries staging an ancestor replaces auto-populated entry and its provenance`() = webTest { client ->
+        refFile("opts.json", """{"a": {"b": 1}}""")
+        McInstanceMocFileSystem.reload()
+        gameFile("opts.json", """{"a": {"b": 42}}""")
+        McInstanceMocFileSystem.reload()
+        client.post("/api/draft/entries") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"filePath":"opts.json","optionPath":"$['a']['b']","mode":"DEFAULT"}""")
+        }
+        client.post("/api/draft/finalize") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"name":"patch-c"}""")
+        }
+
+        client.post("/api/recomp") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"startIdx":0,"endIdx":0,"isAmend":false}""")
+        }
+        assertEquals("patch-c", RecompositionDraft.sourceMap["opts.json" to "$['a']['b']"],
+            "precondition: entry auto-populated with provenance")
+
+        val res = client.post("/api/recomp/entries") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"filePath":"opts.json","optionPath":"$['a']","mode":"OVERRIDE"}""")
+        }
+        assertEquals(HttpStatusCode.OK, res.status)
+        assertEquals(listOf("$['a']"), RecompositionDraft.entries.map { it.optionPath })
+        assertTrue(RecompositionDraft.sourceMap.isEmpty(),
+            "removed entry's provenance must be discarded with it")
+    }
+
     @Test
     fun `GET recomp diff returns 404 without an active session`() = webTest { client ->
         val res = client.get("/api/recomp/diff")
