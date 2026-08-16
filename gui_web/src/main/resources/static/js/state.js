@@ -61,7 +61,7 @@ export const uiState = {
     fileAnchor: null,            // last file path clicked in the file tree, for shift-range
     focusedComponent: null,      // 'main' | 'staging' | 'history' | 'filetree' | null — which component Ctrl/Cmd+A applies to
     rawNodes: new Set(),         // DiffNode paths showing [RAW] value
-    openDropdown: null,          // id of the currently open ActionDropdown, or null
+    openDropdown: null,          // { id, up } of the currently open ActionDropdown, or null
 
     // Ignores (tech/flow §9)
     displayMode: 'GREYED',       // 'GREYED' | 'FILTERED' — how ignored entries are displayed

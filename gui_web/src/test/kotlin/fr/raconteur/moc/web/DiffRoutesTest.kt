@@ -134,7 +134,7 @@ class DiffRoutesTest : WebTestBase() {
         val res = client.get("/api/diff/${"nested.json".encodeURLPathPart()}")
         assertEquals(HttpStatusCode.OK, res.status)
         val body = res.bodyAsText()
-        assertEquals(listOf("$['test']"), treePaths(body),
+        assertEquals(listOf("$", "$['test']"), treePaths(body),
             "former children of an atomically replaced node stay hidden: $body")
         assertTrue(body.contains(""""newValue":"test""""), body)
     }
@@ -147,20 +147,70 @@ class DiffRoutesTest : WebTestBase() {
         val res = client.get("/api/diff/${"nested.json".encodeURLPathPart()}")
         assertEquals(HttpStatusCode.OK, res.status)
         val body = res.bodyAsText()
-        assertEquals(listOf("$['test']"), treePaths(body),
-            "object root on both sides stays implicit, descendants rationalized: $body")
+        assertEquals(listOf("$", "$['test']"), treePaths(body),
+            "root node is structural, the deleted child hangs beneath it: $body")
         assertTrue(body.contains(""""kind":"DELETED""""), body)
     }
 
+    // Gson omits null fields: a value-less node simply lacks oldValue/newValue.
+    private fun rootNode(body: String): com.google.gson.JsonObject =
+        com.google.gson.JsonParser.parseString(body).asJsonObject
+            .getAsJsonArray("tree").first().asJsonObject
+
     @Test
-    fun `root without its own record stays implicit`() = webTest { client ->
+    fun `container-summary root is always present with children and no values`() = webTest { client ->
         gameFile("opts.json", """{"x": 42}""")
         refFile("opts.json",  """{"x": 1}""")
         McInstanceMocFileSystem.reload()
 
         val res = client.get("/api/diff/${"opts.json".encodeURLPathPart()}")
         assertEquals(HttpStatusCode.OK, res.status)
-        assertFalse(res.bodyAsText().contains(""""path":"$""""),
-            "no synthetic root row when only children differ")
+        val body = res.bodyAsText()
+        assertEquals(listOf("$", "$['x']"), treePaths(body),
+            "the tree is rooted at the container-summary root node: $body")
+        val root = rootNode(body)
+        assertEquals("CHANGED", root.get("kind").asString)
+        assertTrue(root.get("hasChildren").asBoolean, body)
+        assertFalse(root.has("oldValue"), "a node with children carries no values: $body")
+        assertFalse(root.has("newValue"), "a node with children carries no values: $body")
+    }
+
+    @Test
+    fun `deleted file shows a single (file) root node`() = webTest { client ->
+        refFile("gone.json", """{"a": 1}""")
+        McInstanceMocFileSystem.reload()
+
+        val res = client.get("/api/diff/${"gone.json".encodeURLPathPart()}")
+        assertEquals(HttpStatusCode.OK, res.status)
+        val body = res.bodyAsText()
+        assertEquals(listOf(""), treePaths(body), "deleted file tree is a single (file) root: $body")
+        val root = rootNode(body)
+        assertEquals("(file)", root.get("label").asString)
+        assertEquals("DELETED", root.get("kind").asString)
+        assertFalse(root.get("hasChildren").asBoolean, body)
+        assertTrue(root.has("oldValue"), "a deleted leaf carries its former value: $body")
+    }
+
+    @Test
+    fun `staging the root stages the whole file and replaces staged children`() = webTest { client ->
+        gameFile("opts.json", """{"x": 42, "y": 7}""")
+        refFile("opts.json",  """{"x": 1, "y": 7}""")
+        McInstanceMocFileSystem.reload()
+
+        client.post("/api/draft/entries") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"filePath":"opts.json","optionPath":"$['x']","mode":"DEFAULT"}""")
+        }
+        val staged = client.post("/api/draft/entries") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"filePath":"opts.json","optionPath":"$","mode":"DEFAULT"}""")
+        }
+        assertEquals(HttpStatusCode.OK, staged.status, "the container-summary root must be stageable")
+
+        val entries = client.get("/api/draft")
+        val paths = com.google.gson.JsonParser.parseString(entries.bodyAsText()).asJsonObject
+            .getAsJsonArray("entries").map { it.asJsonObject.get("optionPath").asString }
+        assertEquals(listOf("$"), paths,
+            "staging the root captures the whole file and replaces staged children")
     }
 }

@@ -51,6 +51,24 @@ export function selectAll(selectedSet, orderedKeys) {
     for (const k of orderedKeys) selectedSet.add(k);
 }
 
+// Resolves the ordered keys a Ctrl/Cmd+A should select in the diff tree, from
+// the selection index built at render time. With an existing selection, the
+// scope is that selection's scope; with no selection, it is the root node's
+// CHILDREN — never the root alone, so the quickest gesture means "every
+// changed top-level option, individually" and not "the whole file". A leaf
+// root (atomic replacement, deleted file) has no children scope and falls
+// back to the depth-0 scope (itself).
+export function selectAllKeys(selIndex, filePath, anchorKey) {
+    let scope;
+    if (anchorKey) {
+        scope = selIndex.scopeOf.get(anchorKey);
+    } else {
+        const rootKey = selIndex.siblingsByScope.get(`ROOT::${filePath}`)?.[0];
+        scope = (rootKey && selIndex.siblingsByScope.has(rootKey)) ? rootKey : `ROOT::${filePath}`;
+    }
+    return selIndex.siblingsByScope.get(scope) ?? [];
+}
+
 export function isSelectAllShortcut(event) {
     return (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a';
 }

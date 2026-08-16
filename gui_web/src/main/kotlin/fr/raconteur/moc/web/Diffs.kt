@@ -69,27 +69,25 @@ object DiffTreeBuilder {
         }
     }
 
-    // Builds the full per-file tree. The diff engine records a Changed entry at "$"
-    // for ANY leaf change beneath an object root (container summary) — that is not a
-    // root change of its own. The root is returned as a regular node only for atomic
-    // root replacements: the new root value is a scalar, an array, or an empty/raw
-    // string (i.e. not an object). Otherwise the tree exposes only the children of
-    // "$" and no synthetic root row is added.
+    // Builds the full per-file tree, always rooted at a single root node: "" (the
+    // file-deletion marker) when present, else "$". The diff engine records a Changed
+    // entry at "$" for ANY leaf change beneath an object root (container summary) —
+    // that root node is structural: it carries its children but no values of its own
+    // (see buildNode's leaf-only value rule).
     //
-    // An atomic root replacement is displayed as a SINGLE node: the Deleted records
-    // of former children stay in the flat diff (they drive DEFAULT-deletion matching
-    // at apply time) but are redundant with the root replacement on screen.
+    // An atomic root replacement (root Changed to a non-object value) is displayed as
+    // a SINGLE leaf node: the Deleted records of former children stay in the flat
+    // diff (they drive DEFAULT-deletion matching at apply time) but are redundant
+    // with the root replacement on screen.
     fun buildTree(
         flatDiff: Map<String, OptionDiff>,
         resolveAction: (path: String) -> Pair<String?, String?>,
         unresolved: Set<String> = emptySet(),
         sourceMap: Map<String, String> = emptyMap()
     ): List<DiffNode> {
-        val children = buildChildren(flatDiff, "$", resolveAction, unresolved, sourceMap)
-        val rootDiff = flatDiff["$"] ?: return children
-        if (rootDiff.newValue is Json5Object) return children
-        // Atomic root replacement → buildNode applies the no-children rule itself.
-        return listOf(buildNode(flatDiff, "$", resolveAction, unresolved, sourceMap))
+        val rootPath = if (flatDiff.containsKey("")) "" else "$"
+        if (flatDiff[rootPath] == null) return emptyList()
+        return listOf(buildNode(flatDiff, rootPath, resolveAction, unresolved, sourceMap))
     }
 
     private fun buildNode(
@@ -107,13 +105,17 @@ object DiffTreeBuilder {
         val children = if (isAtomicReplacement) emptyList()
                        else buildChildren(flatDiff, path, resolveAction, unresolved, sourceMap)
         val (action, ignoreKind) = resolveAction(path)
+        // Leaf-only value rule: a node with children carries no old/new values in the
+        // payload — its container value would duplicate the whole subtree (twice, for
+        // the root) for zero display value, since the client only renders leaf values.
+        val hasChildren = children.isNotEmpty()
         return DiffNode(
             path        = path,
             label       = extractLabel(path),
             kind        = optionDiffKind(optDiff),
-            oldValue    = optDiff?.oldValue.toPlainValue(),
-            newValue    = optDiff?.newValue.toPlainValue(),
-            hasChildren = children.isNotEmpty(),
+            oldValue    = if (hasChildren) null else optDiff?.oldValue.toPlainValue(),
+            newValue    = if (hasChildren) null else optDiff?.newValue.toPlainValue(),
+            hasChildren = hasChildren,
             children    = children,
             action      = action,
             ignoreKind  = ignoreKind,
@@ -121,34 +123,6 @@ object DiffTreeBuilder {
             source      = sourceMap[path]
         )
     }
-}
-
-// A deleted file is represented by MocFile.diffFrom as a single flatContentDiff entry at
-// path "" (not "$"), with no children — the recursive directChildren traversal from "$"
-// would find nothing. Callers must special-case this instead of calling DiffTreeBuilder.
-fun buildDeletedFileTree(
-    flatDiff: Map<String, OptionDiff>,
-    resolveAction: (path: String) -> Pair<String?, String?>,
-    unresolved: Set<String> = emptySet(),
-    sourceMap: Map<String, String> = emptyMap()
-): List<DiffNode> {
-    val optDiff = flatDiff[""] ?: return emptyList()
-    val (action, ignoreKind) = resolveAction("")
-    return listOf(
-        DiffNode(
-            path        = "",
-            label       = "(file)",
-            kind        = "DELETED",
-            oldValue    = optDiff.oldValue.toPlainValue(),
-            newValue    = null,
-            hasChildren = false,
-            children    = emptyList(),
-            action      = action,
-            ignoreKind  = ignoreKind,
-            unresolved  = "" in unresolved,
-            source      = sourceMap[""]
-        )
-    )
 }
 
 fun fileKindName(kind: FileDiffKind): String = when (kind) {

@@ -17,15 +17,6 @@ function el(html) {
     return t.content.firstElementChild;
 }
 
-// Directory to add to MocSettings.ignoredPaths for the "Directory" ignore
-// kind — the parent directory of the *file*, since ignored directories are a
-// filesystem concept, not a JSON-option-path one (mirrors the reference
-// Compose GUI's AppState.ignoreDirDialogPath: Path.of(fp).parent ?: fp).
-export function parentDirOf(filePath) {
-    const idx = filePath.lastIndexOf('/');
-    return idx === -1 ? filePath : filePath.slice(0, idx);
-}
-
 // Best-effort prefill for the Value-kind ignore text input, from the node
 // currently displayed in the main area diff tree (if any). Purely a UX
 // convenience — the field stays freely editable either way.
@@ -44,9 +35,10 @@ function findNodeValue(filePath, optionPath) {
     return walk(state.currentTree) ?? '';
 }
 
-// Ignore-type popup (flow §9 mockup) — exact 4 options/wording. Calls
-// onConfirm(kind, targetValue) once confirmed; targetValue is only present
-// (and required, non-empty) for kind === 'VALUE'.
+// Ignore-type popup (flow §9 mockup) — SESSION/VALUE/PERMANENT only; the
+// DIRECTORY kind moved to the file tree's directory rows (design D4 of
+// dropdown-reset-action). Calls onConfirm(kind, targetValue) once confirmed;
+// targetValue is only present (and required, non-empty) for kind === 'VALUE'.
 export function showIgnoreTypeDialog({ filePath, optionPath, onConfirm }) {
     const root = document.getElementById('dialog-root');
     const defaultValue = escapeHtml(String(findNodeValue(filePath, optionPath)));
@@ -67,10 +59,6 @@ export function showIgnoreTypeDialog({ filePath, optionPath, onConfirm }) {
                     <label class="ignore-type-opt">
                         <input type="radio" name="ignore-kind" value="PERMANENT">
                         Permanent
-                    </label>
-                    <label class="ignore-type-opt">
-                        <input type="radio" name="ignore-kind" value="DIRECTORY">
-                        Directory <span class="opt-detail">(ignores the entire parent directory)</span>
                     </label>
                 </div>
                 <input type="text" id="ignore-value-input" placeholder="Target value" value="${defaultValue}" style="display:none">

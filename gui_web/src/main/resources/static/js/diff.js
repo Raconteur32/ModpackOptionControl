@@ -4,8 +4,8 @@ import { state, uiState } from './state.js';
 import { renderActionDropdown, renderBulkActionDropdown, registerBulkHandler } from './dropdown.js';
 import { escapeHtml } from './dialogs.js';
 import { isDescendant } from './pathutils.js';
-import { requestBulkStage, requestBulkIgnore } from './actions.js';
-import { handleSelectClick, selectAll, isSelectAllShortcut } from './selection.js';
+import { requestBulkStage, requestBulkIgnore, requestBulkReset, resolveRowState } from './actions.js';
+import { handleSelectClick, selectAll, selectAllKeys, isSelectAllShortcut } from './selection.js';
 
 let rerenderCallback = () => {};
 export function setRerenderCallback(fn) { rerenderCallback = fn; }
@@ -77,27 +77,30 @@ function renderNode(node, depth, filePath) {
     if (hiddenInFiltered(node)) return '';
 
     const key = `${filePath}::${node.path}`;
-    // Depth-0 nodes are expanded by default; deeper nodes are collapsed by
-    // default. `expandedNodes` stores paths explicitly toggled away from that
-    // default (a simple XOR against the default state).
-    const defaultExpanded = depth === 0;
+    // The tree is always rooted at a single root node ("$", or "(file)" for a
+    // deleted file) at depth 0; the actual changed options live at depth 1.
+    // Both levels are expanded by default so opening a file shows its changed
+    // options directly; deeper nodes are collapsed by default. `expandedNodes`
+    // stores paths explicitly toggled away from that default (a simple XOR
+    // against the default state).
+    const defaultExpanded = depth <= 1;
     const toggled = uiState.expandedNodes.has(node.path);
     const expanded = node.hasChildren && (toggled ? !defaultExpanded : defaultExpanded);
     const selected = uiState.selectedNodes.has(key);
     const raw = uiState.rawNodes.has(key);
     const partial = node.hasChildren ? partialStagedCount(filePath, node.path) : 0;
 
-    // The root node ("$") may carry an atomic replacement (e.g. object → "")
-    // AND deleted children at once — its value must stay visible even then.
-    const isRoot = node.path === '$';
-    const valueHtml = (!node.hasChildren || isRoot) ? renderValue(node, raw) : '';
-    const rawToggle = (!node.hasChildren || isRoot) && node.kind === 'CHANGED'
+    // Leaf-only value rule: the server emits null old/new values for nodes
+    // with children, so values (and the RAW toggle) render for leaves only —
+    // including an atomic root replacement, which arrives children-less.
+    const valueHtml = node.hasChildren ? '' : renderValue(node, raw);
+    const rawToggle = !node.hasChildren && node.kind === 'CHANGED'
         ? `<span class="raw-toggle ${raw ? 'active' : ''}" data-raw-toggle="${escapeHtml(key)}">RAW</span>` : '';
 
     const dropdown = renderActionDropdown({
         filePath,
         optionPath: node.path,
-        action: node.action,
+        state: resolveRowState(filePath, node.path, node.newValue).state,
     });
 
     const kb = kindBadge(node.kind);
@@ -156,12 +159,13 @@ function renderMainAreaBulkBar() {
     });
     registerBulkHandler(BULK_ID, (choice) => {
         if (choice === 'IGNORE') requestBulkIgnore(targets);
+        else if (choice === 'RESET') requestBulkReset(targets);
         else requestBulkStage(targets, choice);
     });
     const dropdown = renderBulkActionDropdown({
         id: BULK_ID,
         state: bulkModeState(keys),
-        options: ['DEFAULT', 'OVERRIDE', 'IGNORE'],
+        options: ['DEFAULT', 'OVERRIDE', 'IGNORE', 'RESET'],
     });
     return `<div class="bulk-action-bar">${keys.length} selected ${dropdown}</div>`;
 }
@@ -179,7 +183,7 @@ function renderPatchEntryRow(entry) {
     const dropdown = renderActionDropdown({
         filePath: entry.filePath,
         optionPath: entry.optionPath,
-        action: entry.mode,
+        state: entry.mode === 'DEFAULT' ? 'DEFAULTED' : 'OVERRIDDEN',
         disabled: true,
     });
     return `
@@ -318,11 +322,10 @@ export function initDiffTree() {
         if (uiState.focusedComponent !== 'main' || !isSelectAllShortcut(e)) return;
         if (!state.currentFile) return;
         e.preventDefault();
-        // Selects all rows in the scope of the current selection if any,
-        // otherwise the top-level rows of the currently displayed file.
+        // Selects all rows in the scope of the current selection if any;
+        // with no selection, the root node's children (see selectAllKeys).
         const anchorKey = uiState.selectedNodes.size > 0 ? uiState.selectedNodes.values().next().value : null;
-        const scope = anchorKey ? selIndex.scopeOf.get(anchorKey) : `ROOT::${state.currentFile}`;
-        const orderedKeys = selIndex.siblingsByScope.get(scope) ?? [];
+        const orderedKeys = selectAllKeys(selIndex, state.currentFile, anchorKey);
         selectAll(uiState.selectedNodes, orderedKeys);
         uiState.selectionAnchor = orderedKeys[0] ?? null;
         rerenderCallback();

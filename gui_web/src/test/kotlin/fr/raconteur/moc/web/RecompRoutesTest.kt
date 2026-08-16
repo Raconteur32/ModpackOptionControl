@@ -314,4 +314,41 @@ class RecompRoutesTest : WebTestBase() {
         assertEquals(HttpStatusCode.OK, res.status)
         assertTrue(res.bodyAsText().contains("\"path\":\"opts.json\""))
     }
+
+    // Design D6 (dropdown-reset-action): staging an option clears its
+    // recomposition-scoped ignore atomically, server-side — otherwise the ghost
+    // ignore would flip the option back to IGNORED when the entry is unstaged.
+    @Test
+    fun `POST recomp entries stage removes recomposition-scoped ignore on the option`() = webTest { client ->
+        refFile("opts.json", """{"x": 1}""")
+        McInstanceMocFileSystem.reload()
+        finalizePatch(client, "patch-a", 42)
+        finalizePatch(client, "patch-b", 99)
+        client.post("/api/recomp") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"startIdx":0,"endIdx":1,"isAmend":false}""")
+        }
+        client.post("/api/recomp/entries") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"filePath":"opts.json","optionPath":"$['x']","action":"ignore","kind":"SESSION"}""")
+        }
+        assertTrue(IgnoreStore.isIgnoredForRecomp("opts.json", "$['x']"))
+
+        val stageRes = client.post("/api/recomp/entries") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"filePath":"opts.json","optionPath":"$['x']","mode":"OVERRIDE"}""")
+        }
+        assertEquals(HttpStatusCode.OK, stageRes.status)
+        assertTrue(!IgnoreStore.isIgnoredForRecomp("opts.json", "$['x']"),
+            "staging must clear the option's recomposition-scoped ignore")
+        assertTrue(RecompositionDraft.entryFor("opts.json", "$['x']") != null)
+
+        // Unstaging afterwards returns the option to UNSTAGED, not IGNORED.
+        client.delete("/api/recomp/entries") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"filePath":"opts.json","optionPath":"$['x']"}""")
+        }
+        assertTrue(RecompositionDraft.entryFor("opts.json", "$['x']") == null)
+        assertTrue(!IgnoreStore.isIgnoredForRecomp("opts.json", "$['x']"))
+    }
 }

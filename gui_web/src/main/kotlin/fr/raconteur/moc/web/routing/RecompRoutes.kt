@@ -14,13 +14,11 @@ import fr.raconteur.moc.web.RecompConflictDto
 import fr.raconteur.moc.web.RecompEntryRequest
 import fr.raconteur.moc.web.RemoveEntryRequest
 import fr.raconteur.moc.web.StartRecompRequest
-import fr.raconteur.moc.web.buildDeletedFileTree
 import fr.raconteur.moc.web.buildFileSummaries
 import fr.raconteur.moc.web.fileKindName
 import fr.raconteur.moc.web.isFileIgnored
 import fr.raconteur.moc.web.resolveIgnoreAction
 import fr.raconteur.moc.web.toDraftEntryDto
-import fr.raconteur.moc.filesystem.FileDiffKind
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -149,10 +147,7 @@ fun Routing.recompRoutes() {
         }
 
         val unresolvedForFile = unresolvedSet.filter { it.first == filePath }.map { it.second }.toSet()
-        val tree = if (fileDiff.kind == FileDiffKind.DELETED)
-            buildDeletedFileTree(fileDiff.flatContentDiff, resolveAction, unresolvedForFile, sourceMap)
-        else
-            DiffTreeBuilder.buildTree(fileDiff.flatContentDiff, resolveAction, unresolvedForFile, sourceMap)
+        val tree = DiffTreeBuilder.buildTree(fileDiff.flatContentDiff, resolveAction, unresolvedForFile, sourceMap)
 
         call.respond(mapOf("file" to summary, "tree" to tree))
     }
@@ -209,6 +204,13 @@ fun Routing.recompRoutes() {
             is OptionDiff.Deleted -> RecompositionDraft.setDeletionEntry(optDiff.filePath, optDiff.path, optDiff.oldValue, mode)
         }
         RecompositionDraft.resolveConflict(body.filePath, body.optionPath)
+        // Staging an option clears any recomp-scoped ignore on it, atomically —
+        // otherwise the ghost ignore would resurface (IGNORED) if the entry is
+        // later unstaged. Server-side so it holds for any client (design D6).
+        if (IgnoreStore.isIgnoredForRecomp(body.filePath, body.optionPath)) {
+            IgnoreStore.removeRecomp(body.filePath, body.optionPath)
+            EventBus.broadcast("ignores_changed")
+        }
         EventBus.broadcast("draft_changed")
         if (wasConflicting) EventBus.broadcast("conflicts_changed", mapOf("count" to RecompositionDraft.conflictingEntries.size))
         call.respond(HttpStatusCode.OK, emptyMap<String, String>())

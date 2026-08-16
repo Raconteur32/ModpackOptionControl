@@ -41,7 +41,7 @@ function renderEntry(entry) {
     const dropdown = renderActionDropdown({
         filePath: entry.filePath,
         optionPath: entry.optionPath,
-        action: entry.mode,
+        state: entry.mode === 'DEFAULT' ? 'DEFAULTED' : 'OVERRIDDEN',
     });
     const sourceTag = renderSourceTag(entry);
     return `
@@ -88,13 +88,18 @@ function renderStagingBulkBar() {
         const idx = k.lastIndexOf('::');
         return { filePath: k.slice(0, idx), optionPath: k.slice(idx + 2) };
     });
-    registerBulkHandler(BULK_ID, (choice) => setDraftEntriesMode(targets, choice));
+    registerBulkHandler(BULK_ID, (choice) => {
+        // RESET on staged entries is the same remove as the [Remove] button —
+        // batched, no confirmation.
+        if (choice === 'RESET') removeDraftEntriesDirect(targets);
+        else setDraftEntriesMode(targets, choice);
+    });
     const modes = keys.map(k => state.draftEntries.find(e => stagingKey(e) === k)?.mode ?? null);
     const bulkState = modes.every(m => m === modes[0]) ? modes[0] : 'MIXED';
     const dropdown = renderBulkActionDropdown({
         id: BULK_ID,
         state: bulkState,
-        options: ['DEFAULT', 'OVERRIDE'],
+        options: ['DEFAULT', 'OVERRIDE', 'RESET'],
     });
     return `<div class="bulk-action-bar">${keys.length} selected ${dropdown}
         <button class="btn btn-secondary" id="btn-staging-bulk-remove">Remove</button></div>`;

@@ -1,7 +1,6 @@
 package fr.raconteur.moc.web.routing
 
 import fr.raconteur.moc.content.OptionDiff
-import fr.raconteur.moc.filesystem.FileDiffKind
 import fr.raconteur.moc.filesystem.McInstanceMocFileSystem
 import fr.raconteur.moc.web.McInstanceRefMocFileSystem
 import fr.raconteur.moc.web.DraftPatch
@@ -9,7 +8,6 @@ import fr.raconteur.moc.web.DiffTreeBuilder
 import fr.raconteur.moc.web.EmptyMocFileSystem
 import fr.raconteur.moc.web.IgnoreStore
 import fr.raconteur.moc.web.FileSummary
-import fr.raconteur.moc.web.buildDeletedFileTree
 import fr.raconteur.moc.web.buildFileSummaries
 import fr.raconteur.moc.web.fileKindName
 import fr.raconteur.moc.web.isFileIgnored
@@ -63,10 +61,7 @@ fun Routing.diffRoutes() {
             ignored       = isFileIgnored(filePath, fileDiff)
         )
 
-        val tree = if (fileDiff.kind == FileDiffKind.DELETED)
-            buildDeletedFileTree(fileDiff.flatContentDiff, resolveActionFor(filePath, fileDiff.flatContentDiff))
-        else
-            DiffTreeBuilder.buildTree(fileDiff.flatContentDiff, resolveActionFor(filePath, fileDiff.flatContentDiff))
+        val tree = DiffTreeBuilder.buildTree(fileDiff.flatContentDiff, resolveActionFor(filePath, fileDiff.flatContentDiff))
 
         call.respond(mapOf("file" to summary, "tree" to tree))
     }

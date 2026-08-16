@@ -148,6 +148,12 @@
   z-index: 40;
   overflow: hidden;
 }
+/* Flip variant: opens upward when there isn't enough room below in the
+   enclosing scroll container (set at toggle time, see dropdown.js). */
+.action-dropdown-menu.dropup {
+  top: auto;
+  bottom: calc(100% + 2px);
+}
 .action-dropdown-menu .opt {
   padding: 6px 10px;
   font-family: var(--font-ui);
@@ -158,6 +164,9 @@
 .action-dropdown-menu .opt.DEFAULT  { color: var(--mode-default); }
 .action-dropdown-menu .opt.OVERRIDE { color: var(--mode-override); }
 .action-dropdown-menu .opt.IGNORE   { color: var(--mode-ignore); }
+.action-dropdown-menu .menu-sep { height: 1px; background: var(--border); }
+.action-dropdown-menu .opt.RESET { color: var(--text-muted); }
+.action-dropdown-menu .opt.RESET:hover { color: var(--mode-ignore); }
 
 /* ---------- Dialogs (design §9) ---------- */
 
@@ -378,7 +387,11 @@
   color: var(--text-primary);
 }
 
-#diff-tree { flex: 1; overflow-y: auto; padding: var(--space-2) 0; }
+/* No overflow-y here: #diff-tree is content-sized (its parent isn't a flex
+   column with bounded height), so the actual scroller is #main-area. An
+   overflow-y: auto here would be inert for scrolling but would clip the
+   absolutely-positioned action dropdown menu (dropdown-reset-action). */
+#diff-tree { flex: 1; padding: var(--space-2) 0; }
 
 /* ---------- Read-only patch view (flow §10 [View]) ---------- */
 

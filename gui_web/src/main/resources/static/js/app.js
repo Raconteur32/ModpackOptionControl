@@ -5,7 +5,7 @@ import { api } from './api.js';
 import { state, uiState, currentMode, amendTargetName, recompRangeNames } from './state.js';
 import { escapeHtml } from './dialogs.js';
 
-import { renderFileTree, initFileTree, setSelectFileCallback, setRerenderCallback as setFileTreeRerender } from './filetree.js';
+import { renderFileTree, initFileTree, setSelectFileCallback, setRerenderCallback as setFileTreeRerender, setReloadCallback as setFileTreeReload } from './filetree.js';
 import { renderMainArea, initDiffTree, setRerenderCallback as setDiffRerender } from './diff.js';
 import { renderStagingTitle, renderStagingList, renderStagingActions, initStaging, setNavigateCallback, setReloadCallback as setStagingReload, setRerenderCallback as setStagingRerender } from './staging.js';
 import { renderHistory, initHistory, setReloadCallback as setHistoryReload, setRerenderCallback as setHistoryRerender } from './history.js';
@@ -163,6 +163,10 @@ setSelectFileCallback(async (path) => {
     render();
 });
 setFileTreeRerender(render);
+// Directory-ignore button in the file tree: DIRECTORY ignores reload both
+// filesystems server-side, so refresh diff + ignores (the matching WS events
+// would arrive too — this just makes the refresh deterministic).
+setFileTreeReload(async () => { await reloadIgnores(); await reloadDiff(); render(); });
 setDiffRerender(render);
 setStagingRerender(render);
 setDropdownRerender(render);

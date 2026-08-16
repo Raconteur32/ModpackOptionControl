@@ -3,14 +3,17 @@
 
 import { state, uiState } from './state.js';
 import { renderActionDropdown, renderBulkActionDropdown, registerBulkHandler } from './dropdown.js';
-import { rootPathForFile, requestBulkStage, requestBulkIgnore } from './actions.js';
+import { rootPathForFile, requestBulkStage, requestBulkIgnore, requestBulkReset, resolveRowState } from './actions.js';
 import { escapeHtml } from './dialogs.js';
 import { handleSelectClick, selectAll, isSelectAllShortcut } from './selection.js';
+import { api } from './api.js';
 
 let selectFileCallback = () => {};
 export function setSelectFileCallback(fn) { selectFileCallback = fn; }
 let rerenderCallback = () => {};
 export function setRerenderCallback(fn) { rerenderCallback = fn; }
+let reloadCallback = async () => {};
+export function setReloadCallback(fn) { reloadCallback = fn; }
 
 const BULK_ID = 'bulk-filetree';
 
@@ -47,7 +50,7 @@ function renderFileRow(f) {
     const dropdown = renderActionDropdown({
         filePath: f.path,
         optionPath: rootPath,
-        action: fileAction(f, rootPath),
+        state: fileRowState(f, rootPath),
     });
     return `
         <div class="row file-row ${active ? 'active' : ''} ${selected ? 'selected' : ''} ${f.ignored ? 'ignored-hard' : ''}">
@@ -60,12 +63,23 @@ function renderFileRow(f) {
         </div>`;
 }
 
-// Derives the whole-file dropdown's current action from staged/ignored state,
-// since FileSummary doesn't carry `action` directly (that's a DiffNode-only field).
+// Whole-file dropdown state (design D1). resolveRowState covers staged entries
+// and ignore rules; f.ignored (server-computed, VALUE-targetValue-aware) is the
+// fallback for ignore matches the client can't evaluate without the option's
+// current value.
+function fileRowState(f, rootPath) {
+    const { state: s } = resolveRowState(f.path, rootPath);
+    if (s !== 'UNSTAGED') return s;
+    return f.ignored ? 'IGNORED' : 'UNSTAGED';
+}
+
+// Same derivation as fileRowState, mapped to the legacy action strings the
+// bulk dropdown's common/mixed state display expects.
 function fileAction(f, rootPath) {
-    const entry = state.draftEntries.find(e => e.filePath === f.path && e.optionPath === rootPath);
-    if (entry) return entry.mode;
-    if (f.ignored) return 'IGNORE';
+    const s = fileRowState(f, rootPath);
+    if (s === 'DEFAULTED') return 'DEFAULT';
+    if (s === 'OVERRIDDEN') return 'OVERRIDE';
+    if (s === 'IGNORED') return 'IGNORE';
     return null;
 }
 
@@ -103,12 +117,13 @@ function renderFileTreeBulkBar() {
     });
     registerBulkHandler(BULK_ID, (choice) => {
         if (choice === 'IGNORE') requestBulkIgnore(targets);
+        else if (choice === 'RESET') requestBulkReset(targets);
         else requestBulkStage(targets, choice);
     });
     const dropdown = renderBulkActionDropdown({
         id: BULK_ID,
         state: bulkModeState(paths),
-        options: ['DEFAULT', 'OVERRIDE', 'IGNORE'],
+        options: ['DEFAULT', 'OVERRIDE', 'IGNORE', 'RESET'],
     });
     return `<div class="bulk-action-bar">${paths.length} selected ${dropdown}</div>`;
 }
@@ -124,6 +139,7 @@ function renderDir(node, depth) {
     return `
         <div class="dir-header" style="padding-left:${depth * 12}px" data-toggle-dir="${escapeHtml(node.fullPath)}">
             <span>${isCollapsed ? '▶' : '▼'}</span> ${escapeHtml(node.name)}
+            <button class="btn-icon dir-ignore-btn" data-ignore-dir="${escapeHtml(node.fullPath)}" title="Ignore directory">&#128683;</button>
         </div>
         <div class="dir-children ${isCollapsed ? 'collapsed' : ''}" style="padding-left:${(depth + 1) * 4}px">
             ${childDirs}${childFiles}
@@ -172,7 +188,18 @@ export function initFileTree() {
     initialized = true;
     const fileTree = document.getElementById('file-tree');
 
-    document.getElementById('file-tree-list').addEventListener('click', (e) => {
+    document.getElementById('file-tree-list').addEventListener('click', async (e) => {
+        // Directory-level ignore (design D4): applies a DIRECTORY ignore for
+        // the whole directory directly — no type popup, no per-row unignore
+        // (an ignored directory disappears from the diff; removal stays in
+        // the Ignores popover).
+        const ignoreDir = e.target.closest('[data-ignore-dir]');
+        if (ignoreDir) {
+            e.stopPropagation();
+            await api.ignores.add({ filePath: ignoreDir.dataset.ignoreDir, optionPath: '', kind: 'DIRECTORY' });
+            await reloadCallback();
+            return;
+        }
         const dirToggle = e.target.closest('[data-toggle-dir]');
         if (dirToggle) {
             const path = dirToggle.dataset.toggleDir;
