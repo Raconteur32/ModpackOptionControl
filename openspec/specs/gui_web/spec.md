@@ -96,13 +96,23 @@ The server SHALL broadcast JSON events `{"type": ...}` to all connected clients 
 
 ### Requirement: Diff exposure
 
-Diff endpoints SHALL serve the diff between the live instance and the dev reference as file summaries (ordered CHANGED, then NEW, then DELETED, alphabetical within group) and per-file option trees with labels, kinds, old/new values, staged/ignored annotations, and (in sessions) conflict and source-patch provenance. Before every diff response, stale value ignores are pruned. With `showAll=true`, the diff is computed against an empty file system so every option appears as NEW. Deleted files appear as a single node labelled `(file)`.
+Diff endpoints SHALL serve the diff between the live instance and the dev reference as file summaries (ordered CHANGED, then NEW, then DELETED, alphabetical within group) and per-file option trees with labels, kinds, old/new values, staged/ignored annotations, and (in sessions) conflict and source-patch provenance. Before every diff response, stale value ignores are pruned. With `showAll=true`, the diff is computed against an empty file system so every option appears as NEW.
 
-A per-file option tree SHALL include the root node `$` itself — as a regular node carrying its label, kind, and old/new values — whenever the root was replaced atomically, i.e. the new root value is not an object (a scalar, an array, or a raw/empty string). A container-summary record at `$` (root object on both old and new sides, with changes only beneath it) carries no information of its own and SHALL NOT produce a synthetic root row; the tree then exposes only the children of `$`. A file whose only visible change is such an atomic root replacement SHALL therefore still display a one-node tree instead of an empty tree.
+Every per-file option tree SHALL be rooted at a single root node: the `$` node for an existing file, or the `(file)` deletion-marker node (`""`) for a deleted file. The root node is a regular node — it carries its label, kind, staged/ignored annotations, and (when leaf) old/new values, and it SHALL be stageable, ignorable and resettable through the same per-row and bulk machinery as any other option. Staging the root node stages the whole file content (its container value), which is semantically distinct from staging its children individually (only the changed, displayed options).
+
+A node that has children SHALL NOT carry serialized old/new values in the tree payload, and the client SHALL NOT render values for such a node. A leaf node — including an atomic replacement, whose former children's Deleted records remain in the underlying flat diff (they drive apply-time matching) but are not displayed — SHALL carry and render its old/new values. This applies uniformly to every node, including the root: the container-summary record at `$` (root object on both sides, changes only beneath it) produces a root node with children and no values.
 
 #### Scenario: Staged annotation wins
 - **WHEN** an option is both staged and ignored
 - **THEN** the node reports the staged action (DEFAULT/OVERRIDE)
+
+#### Scenario: Root node always present
+- **WHEN** a file's root is an object on both sides of the diff and only options below `$` changed
+- **THEN** the tree's top level is the CHANGED root node `$` itself, carrying no old/new values, with the changed options as its children
+
+#### Scenario: Container-summary root stays implicit
+- **WHEN** a file's root is an object on both sides of the diff and only options below `$` changed
+- **THEN** the container-summary record at `$` produces a root node with children and no old/new values (the root node is structural; it exposes no container value of its own)
 
 #### Scenario: Emptied JSON file shows a root change
 - **WHEN** a managed JSON file whose previous content was an object is now empty
@@ -110,15 +120,23 @@ A per-file option tree SHALL include the root node `$` itself — as a regular n
 
 #### Scenario: Root replaced by an array is visible
 - **WHEN** a managed JSON file's root changed from an object to an array (including `[]`)
-- **THEN** the per-file diff tree shows the CHANGED root node with its old and new values
-
-#### Scenario: Container-summary root stays implicit
-- **WHEN** a file's root is an object on both sides of the diff and only options below `$` changed
-- **THEN** the tree's top level lists those options directly, with no synthetic root row
+- **THEN** the per-file diff tree shows the CHANGED root node with its old and new values and no children
 
 #### Scenario: Atomic replacement hides former children at any depth
 - **WHEN** any option node (including the root) changes from an object to a non-object value — e.g. `{"test": {"test": "test"}}` becoming `{"test": "test"}`
 - **THEN** the tree shows only the CHANGED node with its old and new values; the former children's Deleted records remain in the underlying diff (they drive apply-time matching) but are not displayed
+
+#### Scenario: Deleted file shows a single (file) root node
+- **WHEN** a managed file no longer exists
+- **THEN** the per-file diff tree is a single DELETED root node labelled `(file)`, carrying its former value, stageable and ignorable like any other node
+
+#### Scenario: Staging the root stages the whole file
+- **WHEN** the user stages the root node `$` of a changed file
+- **THEN** the resulting patch entry captures the entire file content at `$` — including unchanged and ignored options — rather than only the options visible in the tree
+
+#### Scenario: Node with children carries no values
+- **WHEN** a diff node has children (e.g. the container-summary root of a large config file)
+- **THEN** the diff response does not serialize that node's old/new values and the client renders no value column for it
 
 ### Requirement: Ignore rule lifetimes
 
@@ -172,6 +190,8 @@ The web backend SHALL operate on the same on-disk state as the desktop GUI (`con
 
 The shipped SPA SHALL provide the complete authoring workflow without a build step: a mode badge (NEW PATCH / AMEND / RECOMPOSITION) driven by session state, directory-grouped file tree, expandable diff tree with per-row and bulk stage/ignore actions, a staging panel with per-entry mode switching and source provenance, patch history with view/amend/recompose/delete (single and bulk), ignore management popovers, conflict-aware confirmation flows, and automatic refresh driven by the WebSocket event map with reconnect.
 
+Multi-select gestures follow standard web conventions within a scope (same level, same parent). Select-all (Ctrl/Cmd+A) with an existing selection SHALL select every visible row in that selection's scope; with no selection, it SHALL select the root node's direct children — never the root node alone, so that the quickest gesture always means "every changed top-level option, individually" and not "the whole file".
+
 #### Scenario: Amend entry points
 - **WHEN** the user amends
 - **THEN** they can start either from staged draft entries (finalize-for-amend then session) or directly from the last patch in history, and an unsaved-draft prompt offers Keep or Overwrite in the latter case
@@ -179,3 +199,85 @@ The shipped SPA SHALL provide the complete authoring workflow without a build st
 #### Scenario: Finalize gating in the UI
 - **WHEN** a session has unresolved conflicts
 - **THEN** the Finalize action is disabled until every conflict is staged or ignored
+
+#### Scenario: Select-all without selection targets the root's children
+- **WHEN** the user presses Ctrl/Cmd+A in the diff tree with no current selection
+- **THEN** every visible direct child of the root node is selected, and the root node itself is not
+
+#### Scenario: Select-all with selection keeps its scope
+- **WHEN** the user presses Ctrl/Cmd+A in the diff tree with an existing selection
+- **THEN** every visible row sharing the selection's scope (same level, same parent) is selected
+
+### Requirement: State-aware action dropdown with RESET
+
+The browser client SHALL model each per-row action dropdown as a state label plus a state-dependent menu of actions. The state SHALL be one of UNSTAGED (button rendered empty), DEFAULTED, OVERRIDDEN, or IGNORED, derived from the staged entry or matching ignore rule for that file/option. The menu SHALL offer:
+
+- UNSTAGED: DEFAULT, OVERRIDE, IGNORE
+- DEFAULTED or OVERRIDDEN: DEFAULT, OVERRIDE, IGNORE, RESET
+- IGNORED: RESET
+
+RESET SHALL return the option to UNSTAGED without confirmation: for a staged option it SHALL remove the staged entry (draft in NEW PATCH mode, recomposition entries in AMEND/RECOMPOSITION mode); for an ignored option it SHALL remove the matching ignore rule, using the rule's known kind — SESSION, VALUE, or PERMANENT via the general ignores endpoint, or the recomposition-scoped ignores endpoint for recomp ignores. RESET SHALL reuse existing API routes only.
+
+#### Scenario: Unstage a staged option from the diff tree
+- **WHEN** the user opens the dropdown of a DEFAULTED option and clicks RESET
+- **THEN** the staged entry is removed without any confirmation dialog and the option returns to UNSTAGED
+
+#### Scenario: Unignore an ignored option from the diff tree
+- **WHEN** the user opens the dropdown of an IGNORED option
+- **THEN** the menu offers only RESET, and clicking it removes the matching ignore rule without confirmation and the option returns to UNSTAGED
+
+#### Scenario: RESET on a staged option in AMEND mode
+- **WHEN** the user clicks RESET on an entry staged in an AMEND or RECOMPOSITION session (including entries originating from the amended patch)
+- **THEN** the entry is removed via the recomposition entries endpoint without confirmation, with the same semantics as the staging panel remove button
+
+#### Scenario: UNSTAGED button stays visually empty
+- **WHEN** an option has no staged entry and no matching ignore rule
+- **THEN** its dropdown button renders with no label text, as before
+
+### Requirement: Staging clears recomposition-scoped ignores
+
+When an option is staged (single or bulk) in an AMEND/RECOMPOSITION session, any recomposition-scoped ignore for that option SHALL be removed: the server SHALL remove it atomically as part of the stage operation so the invariant holds for any client, and the browser client SHALL additionally detect the recomp ignore when planning the stage and include the same "will be un-ignored" warning it shows for other ignore kinds. After such a stage, unstaging the option SHALL return it to UNSTAGED (never back to IGNORED).
+
+#### Scenario: Stage over a recomp ignore with warning
+- **WHEN** the user stages (or bulk-stages) an option that carries a recomposition-scoped ignore
+- **THEN** the confirmation popup lists the un-ignore effect as for other kinds, and after confirming, both the staged entry exists and the recomp ignore is gone from the recomp-ignores list
+
+#### Scenario: Server-side invariant
+- **WHEN** a stage request reaches `POST /api/recomp/entries` for an option holding a recomp ignore (from any client, even one that did not remove the ignore itself)
+- **THEN** the recomp ignore is removed atomically with the stage and an `ignores_changed` event is broadcast
+
+#### Scenario: Unstage after stage-over-ignore returns to UNSTAGED
+- **WHEN** the user stages an option that carried a recomp ignore and later unstages it (RESET or the staging panel remove button)
+- **THEN** the option returns to UNSTAGED, not IGNORED
+
+### Requirement: Bulk RESET action
+
+The bulk action dropdowns (file tree, main diff area, staging panel) SHALL offer RESET in addition to DEFAULT, OVERRIDE, and IGNORE. Bulk RESET SHALL apply the per-row inverse across the whole selection — unstaging staged rows and unignoring ignored rows — without confirmation, reusing the same per-row semantics as the single-row RESET.
+
+#### Scenario: Bulk reset a mixed selection
+- **WHEN** the user selects multiple rows mixing staged and ignored options and picks RESET in the bulk dropdown
+- **THEN** every staged row is unstaged and every ignored row is unignored, with no confirmation dialog
+
+### Requirement: Directory-level ignore action
+
+Directory rows in the file tree SHALL expose an ignore control that applies a DIRECTORY ignore for that directory path, with the same effects as the former popup-based DIRECTORY choice (ignored path registered, staged entries under the directory removed, filesystems reloaded). The ignore-type popup for file/option rows SHALL no longer offer the DIRECTORY kind. The file tree SHALL NOT offer a directory-level unignore control: an ignored directory has no visible diff rows and its ignore rule SHALL remain removable from the Ignores popover.
+
+#### Scenario: Ignore a directory from its tree row
+- **WHEN** the user clicks the ignore control on a directory row
+- **THEN** a DIRECTORY ignore is applied for that directory and its files disappear from the diff tree
+
+#### Scenario: Ignore-type popup kinds
+- **WHEN** the user picks IGNORE on a file row or option row
+- **THEN** the ignore-type popup offers SESSION, VALUE, and PERMANENT only — no DIRECTORY choice
+
+### Requirement: Dropdown menu stays within its scroll container
+
+When an action dropdown menu would overflow the bottom edge of its enclosing scroll container, the menu SHALL open upward from the button instead of downward, so that every option remains clickable. This SHALL apply to all action dropdowns (diff tree, file tree, staging panel, bulk bars).
+
+#### Scenario: Single-option diff tree
+- **WHEN** the user opens the dropdown on the only row of a diff tree (or any row near the bottom of a scroll container)
+- **THEN** the full menu is visible and every option is clickable
+
+#### Scenario: Menu with room below still opens downward
+- **WHEN** the user opens a dropdown whose row has enough space below it within the scroll container
+- **THEN** the menu opens downward as before
