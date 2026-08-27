@@ -9,7 +9,7 @@
 | `common` | Moteur partagé : `MocFileSystem`, content types (json/properties/toml/text), diff option-level, patches, migration. Dépend de rien d'autre. |
 | `fabric` | Le mod runtime (applique les patches au lancement du jeu). |
 | `gui` | GUI desktop (Compose). Consomme `common` ; a sa **propre copie** de `DraftPatch`/`RecompositionDraft` (miroir de `gui_web` — toute modif de finalisation doit être faite des deux côtés). |
-| `gui_web` | Serveur Ktor (REST + WebSocket) + SPA vanilla JS sans build step (`src/main/resources/static`). Même état disque que la GUI desktop, interchangeable. |
+| `gui_web` | Serveur Ktor (REST + WebSocket) + front-end en **migration** : SPA legacy vanilla JS (`src/main/resources/static`) + nouvelle app React/TS/Chakra v3 (`frontend/`, Vite) qui remplace les panneaux un par un (change `modernize-web-frontend`). Même état disque que la GUI desktop, interchangeable. |
 
 Java 25, Gradle Kotlin DSL, Kotlin 2.3.21.
 
@@ -17,8 +17,10 @@ Java 25, Gradle Kotlin DSL, Kotlin 2.3.21.
 
 ```bash
 ./gradlew :common:test :gui_web:test   # tests unitaires (gui n'a pas de tests — NO-SOURCE)
-cd gui_web && npx vitest run           # tests JS (peu nombreux)
-./gradlew :gui_web:shadowJar           # jar autonome gui_web/build/libs/moc-web.jar
+cd gui_web && npx vitest run           # tests JS legacy (peu nombreux)
+cd gui_web/frontend && npm test        # tests du front React (vitest + Testing Library)
+cd gui_web/frontend && npm run dev     # dev server Vite + HMR (proxy /api,/ws → :7599)
+./gradlew :gui_web:shadowJar           # jar autonome (chaîne le build Vite → static/assets/)
 ./web-gui-run.sh [/chemin/instance]    # build + run
 ./gui-run.sh                           # GUI desktop
 ```
@@ -63,5 +65,6 @@ Pas de MCP Playwright configuré ; pattern utilisé avec succès : petit script 
 
 - Specs et changes : **OpenSpec** (`openspec/`, schéma spec-driven). Le behavior contract vit dans `openspec/specs/<module>/spec.md` ; toute évolution passe par un change (proposal → specs → design → tasks → apply → archive). Les deltas MODIFIED reprennent le requirement complet.
 - `doc/` contient les docs de design détaillées (flux GUI, content types, versioning).
-- Code : Kotlin partout, commentaires en franglais assumé ; pas de framework côté front (DOM + innerHTML, délégation d'événements).
+- Code : Kotlin partout, commentaires en franglais assumé. Front-end : le legacy (`gui_web/src/main/resources/static/js`) reste en vanilla JS sans framework le temps de la migration ; tout nouveau code UI va dans `gui_web/frontend` (React + TS + Chakra v3, bundle `static/assets/mount.js` généré par Vite — ne pas éditer à la main).
+- Tests du front React (`gui_web/frontend`) : vitest + Testing Library ; **toujours `user-event` pour les interactions Zag/Chakra** (clics et clavier — `fireEvent` ne déclenche pas les machines Zag en jsdom). Cible clavier d'une branche de TreeView : `[data-part=branch-control]` (le div `data-part=branch` a le `role=treeitem` mais pas de tabindex).
 - Chemins de fichiers dans l'API : relatifs à la racine de l'instance (ex. `config/app.json`), URL-encodés (`encodeURIComponent`) dans les routes `{file}`.

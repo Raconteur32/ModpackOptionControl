@@ -1,3 +1,4 @@
+import './store-shim.js'; // window.__moc avant tout accès à state.js (proxys)
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { menuItemsFor, displayFor } from '../../main/resources/static/js/dropdown.js';
 import { resolveRowState, requestReset, requestBulkReset, setReloadCallback } from '../../main/resources/static/js/actions.js';

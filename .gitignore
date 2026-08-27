@@ -52,6 +52,9 @@ replay_*.log
 
 # node
 node_modules/
+gui_web/frontend/dist/
+# bundle React généré par vite build (gui_web/frontend)
+gui_web/src/main/resources/static/assets/
 
 # openspec capability directory named "build" (matched by the build/ rule above)
 !openspec/specs/build/

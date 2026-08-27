@@ -36,6 +36,36 @@ tasks.withType<ShadowJar> {
     }
 }
 
+// Frontend React (gui_web/frontend, design D2) — vite build génère
+// src/main/resources/static/assets/ (bundle embarqué dans la page legacy
+// pendant la migration). Incremental : npm ci ne tourne que si le lockfile
+// change, vite build que si les sources changent.
+val frontendDir = layout.projectDirectory.dir("frontend")
+
+val npmCi = tasks.register<Exec>("npmCi") {
+    workingDir(frontendDir)
+    commandLine("npm", "ci", "--no-audit", "--no-fund")
+    inputs.file(frontendDir.file("package-lock.json"))
+    outputs.dir(frontendDir.dir("node_modules"))
+}
+
+val viteBuild = tasks.register<Exec>("viteBuild") {
+    dependsOn(npmCi)
+    workingDir(frontendDir)
+    commandLine("npm", "run", "build")
+    inputs.dir(frontendDir.dir("src"))
+    inputs.files(
+        frontendDir.file("package.json"),
+        frontendDir.file("vite.config.ts"),
+        frontendDir.file("tsconfig.json"),
+    )
+    outputs.dir(layout.projectDirectory.dir("src/main/resources/static/assets"))
+}
+
+tasks.named("processResources") {
+    dependsOn(viteBuild)
+}
+
 tasks.withType<JavaCompile>().configureEach {
     options.release = 25
 }
